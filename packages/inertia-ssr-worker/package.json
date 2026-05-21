@@ -1,6 +1,6 @@
 {
   "name": "@blacklizard/inertia-ssr-worker",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Production SSR worker for Inertia.js v3 — wraps your render function with health/readiness endpoints, request/uptime/RSS-based recycling, and graceful drain.",
   "type": "module",
   "license": "MIT",

@@ -1,6 +1,6 @@
 {
   "name": "inertia-express-docs",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "VitePress documentation site for @blacklizard/inertia-express.",
   "private": true,
   "type": "module",
