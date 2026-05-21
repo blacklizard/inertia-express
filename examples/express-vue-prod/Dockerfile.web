@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.6
 # Web tier — Express + Inertia adapter. Slim image, no SSR runtime here.
 
-FROM node:20-alpine AS deps
+FROM node:24-alpine AS deps
 WORKDIR /repo
 RUN corepack enable
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
@@ -16,7 +16,7 @@ COPY . .
 RUN pnpm -r --filter "./packages/*" build
 RUN pnpm --filter example-express-vue-prod build
 
-FROM node:20-alpine AS runtime
+FROM node:24-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 RUN addgroup -S app && adduser -S app -G app
