@@ -1,5 +1,6 @@
 import { createInertiaApp } from "@inertiajs/vue3";
 import { createSSRApp, type DefineComponent, h } from "vue";
+import "./styles.css";
 
 // The server SSR-renders the first paint, so the client hydrates with
 // createSSRApp rather than mounting a fresh tree.

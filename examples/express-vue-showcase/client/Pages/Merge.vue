@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { router } from "@inertiajs/vue3";
+import { Plus, RotateCcw } from "@lucide/vue";
 import Layout from "../Layout.vue";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 
 defineOptions({ layout: Layout });
 
@@ -24,24 +28,50 @@ function reset() {
 </script>
 
 <template>
-  <div>
-    <h1>Merge props</h1>
+  <div class="space-y-6">
+    <h1 class="text-2xl font-bold tracking-tight">Merge props</h1>
 
-    <div class="card">
-      <strong>deepMerge()</strong> — settings.display.density:
-      <code>{{ settings.display.density }}</code>
+    <Card class="gap-2 py-4">
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2 text-base">
+          <Badge variant="outline">deepMerge()</Badge>
+          <code class="text-sm font-normal text-muted-foreground">settings.display.density</code>
+        </CardTitle>
+        <CardDescription>Recursively merged into the existing prop.</CardDescription>
+      </CardHeader>
+      <CardContent class="font-mono text-sm">{{ settings.display.density }}</CardContent>
+    </Card>
+
+    <Card class="gap-2 py-4">
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2 text-base">
+          <Badge variant="outline">merge()</Badge>
+          paginated list
+        </CardTitle>
+        <CardDescription>Loaded up to page {{ page }}.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ul class="space-y-1 text-sm">
+          <li
+            v-for="item in items"
+            :key="item.id"
+            class="rounded-md bg-muted/50 px-3 py-1.5 font-mono"
+          >
+            {{ item.label }}
+          </li>
+        </ul>
+      </CardContent>
+    </Card>
+
+    <div class="flex flex-wrap gap-2">
+      <Button @click="loadMore">
+        <Plus class="size-4" />
+        Load more (append via merge)
+      </Button>
+      <Button variant="outline" @click="reset">
+        <RotateCcw class="size-4" />
+        Reset (X-Inertia-Reset)
+      </Button>
     </div>
-
-    <div class="card">
-      <strong>merge() — paginated list</strong> (loaded up to page {{ page }})
-      <ul>
-        <li v-for="item in items" :key="item.id">{{ item.label }}</li>
-      </ul>
-    </div>
-
-    <p>
-      <button @click="loadMore">Load more (append via merge)</button>
-      <button class="secondary" @click="reset">Reset (X-Inertia-Reset)</button>
-    </p>
   </div>
 </template>

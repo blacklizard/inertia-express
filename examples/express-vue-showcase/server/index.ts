@@ -58,7 +58,7 @@ app.use(
       const head = Array.isArray(ssr.head) ? ssr.head.join("") : (ssr.head ?? "");
       const root = ssr.body || '<div id="app"></div>';
       return `<!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />

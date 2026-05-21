@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { router } from "@inertiajs/vue3";
 import Layout from "../Layout.vue";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 
 defineOptions({ layout: Layout });
 
@@ -24,34 +27,63 @@ function loadStats() {
 </script>
 
 <template>
-  <div>
-    <h1>Props</h1>
+  <div class="space-y-6">
+    <h1 class="text-2xl font-bold tracking-tight">Props</h1>
 
-    <div class="card">
-      <strong>Plain</strong> — <code>serverTime</code>: {{ serverTime }}
-      <p>Evaluated at render time, always sent.</p>
+    <div class="grid gap-3 sm:grid-cols-2">
+      <Card class="gap-3 py-4">
+        <CardHeader>
+          <CardTitle class="flex items-center gap-2 text-base">
+            <Badge variant="outline">Plain</Badge>
+            <code class="text-sm font-normal text-muted-foreground">serverTime</code>
+          </CardTitle>
+          <CardDescription>Evaluated at render time, always sent.</CardDescription>
+        </CardHeader>
+        <CardContent class="font-mono text-sm">{{ serverTime }}</CardContent>
+      </Card>
+
+      <Card class="gap-3 py-4">
+        <CardHeader>
+          <CardTitle class="flex items-center gap-2 text-base">
+            <Badge variant="outline">lazy()</Badge>
+            <code class="text-sm font-normal text-muted-foreground">quote</code>
+          </CardTitle>
+          <CardDescription>Evaluated every visit (full or partial) when included.</CardDescription>
+        </CardHeader>
+        <CardContent class="text-sm italic">"{{ quote }}"</CardContent>
+      </Card>
+
+      <Card class="gap-3 py-4">
+        <CardHeader>
+          <CardTitle class="flex items-center gap-2 text-base">
+            <Badge variant="outline">always()</Badge>
+            <code class="text-sm font-normal text-muted-foreground">liveTick</code>
+          </CardTitle>
+          <CardDescription>Always sent, even on a partial reload that does not name it.</CardDescription>
+        </CardHeader>
+        <CardContent class="font-mono text-sm">{{ liveTick }}</CardContent>
+      </Card>
+
+      <Card class="gap-3 py-4">
+        <CardHeader>
+          <CardTitle class="flex items-center gap-2 text-base">
+            <Badge variant="outline">optional()</Badge>
+            <code class="text-sm font-normal text-muted-foreground">heavyStats</code>
+          </CardTitle>
+          <CardDescription>Omitted on the initial visit; fetched only when requested.</CardDescription>
+        </CardHeader>
+        <CardContent class="text-sm">
+          <span v-if="heavyStats" class="font-mono">
+            {{ heavyStats.rows }} rows @ {{ heavyStats.computedAt }}
+          </span>
+          <span v-else class="text-muted-foreground italic">not loaded</span>
+        </CardContent>
+      </Card>
     </div>
 
-    <div class="card">
-      <strong>lazy()</strong> — <code>quote</code>: "{{ quote }}"
-      <p>Evaluated every visit (full or partial) when included.</p>
+    <div class="flex flex-wrap gap-2">
+      <Button @click="reloadQuote">Partial reload: only "quote"</Button>
+      <Button variant="outline" @click="loadStats">Load optional "heavyStats"</Button>
     </div>
-
-    <div class="card">
-      <strong>always()</strong> — <code>liveTick</code>: {{ liveTick }}
-      <p>Always sent, even on a partial reload that does not name it.</p>
-    </div>
-
-    <div class="card">
-      <strong>optional()</strong> — <code>heavyStats</code>:
-      <span v-if="heavyStats">{{ heavyStats.rows }} rows @ {{ heavyStats.computedAt }}</span>
-      <em v-else>not loaded</em>
-      <p>Omitted on the initial visit; fetched only when requested.</p>
-    </div>
-
-    <p>
-      <button @click="reloadQuote">Partial reload: only "quote"</button>
-      <button class="secondary" @click="loadStats">Load optional "heavyStats"</button>
-    </p>
   </div>
 </template>
