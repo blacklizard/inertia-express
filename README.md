@@ -8,9 +8,16 @@
 
 Production-ready, TypeScript-first [Inertia.js v3](https://inertiajs.com) server adapter for Node.js and Express.
 
-Inertia is a glue layer that lets you build modern SPA-style frontends (Vue, React, Svelte) on top of classic server-side routing — without a separate API. This repo is the server half of that equation for Express.
+Inertia lets you build SPA-style frontends (Vue, React, Svelte) on classic server-side routing — no separate API to build or version. This is the Express server half.
 
-The internal core is framework-agnostic. The Express adapter wraps it with middleware, type augmentation, and helpers. The core is exported as `@blacklizard/inertia-express/core` for building adapters for other frameworks.
+## Features
+
+- **Full Inertia v3 protocol** — partial reloads, deferred / merge / deep-merge props, history encryption. Verified against the official Inertia conformance suite.
+- **SSR** — render in-process, or offload to an out-of-process worker pool with health checks and graceful drain.
+- **Caching** — SSR view cache (in-memory or Redis) plus CDN edge-cache headers.
+- **Prerendering** — warm the SSR cache after a deploy, or export routes to static HTML.
+- **Flash & validation errors** — `connect-flash`-compatible `req.flash()`, plus `res.inertiaErrors()` / `res.inertiaFlash()`.
+- **TypeScript-first** — typed `res.inertia()` and request augmentation. The protocol core is framework-agnostic (`@blacklizard/inertia-express/core`) for building adapters beyond Express.
 
 ## Packages
 
@@ -40,8 +47,9 @@ app.use(
     version: () => process.env.ASSET_VERSION ?? null,
     sharedProps: (req) => ({
       auth: { user: req.user ?? null },
-      flash: req.session?.flash ?? {},
     }),
+    // Auto-promote session flash + validation errors into page props.
+    flashFromSession: true,
   }),
 );
 
