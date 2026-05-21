@@ -1,0 +1,70 @@
+{
+  "name": "@blacklizard/inertia-cache-redis",
+  "version": "0.1.0",
+  "description": "Redis-backed SSR view cache store for @blacklizard/inertia-express. Compatible with node-redis v4+.",
+  "type": "module",
+  "license": "MIT",
+  "author": "blacklizard",
+  "homepage": "https://github.com/blacklizard/inertia-express/tree/main/packages/inertia-cache-redis#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blacklizard/inertia-express.git",
+    "directory": "packages/inertia-cache-redis"
+  },
+  "bugs": {
+    "url": "https://github.com/blacklizard/inertia-express/issues"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm clean && pnpm build && pnpm test"
+  },
+  "peerDependencies": {
+    "@blacklizard/inertia-express": "workspace:*",
+    "redis": "^4.6.0 || ^5.0.0"
+  },
+  "devDependencies": {
+    "@blacklizard/inertia-express": "workspace:*",
+    "@types/node": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "keywords": [
+    "inertia",
+    "inertia-js",
+    "inertiajs",
+    "express",
+    "adapter",
+    "ssr",
+    "spa",
+    "redis",
+    "cache",
+    "worker",
+    "load-balancer",
+    "self-healing"
+  ]
+}

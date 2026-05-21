@@ -1,0 +1,45 @@
+{
+  "name": "example-express-react",
+  "version": "0.0.0",
+  "description": "Example app: Inertia.js v3 + Express + React with @blacklizard/inertia-express.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "author": "blacklizard",
+  "homepage": "https://github.com/blacklizard/inertia-express#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blacklizard/inertia-express.git",
+    "directory": "examples/express-react"
+  },
+  "bugs": {
+    "url": "https://github.com/blacklizard/inertia-express/issues"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "concurrently \"vite\" \"tsx watch server/index.ts\"",
+    "server": "tsx watch server/index.ts",
+    "client": "vite"
+  },
+  "dependencies": {
+    "@blacklizard/inertia-express": "workspace:*",
+    "@inertiajs/react": "^3.2.0",
+    "express": "catalog:",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@inertiajs/vite": "catalog:",
+    "@types/express": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "concurrently": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1.6
+# SSR tier — load-balanced renderer. Independent scaling from web tier.
+
+FROM node:20-alpine AS deps
+WORKDIR /repo
+RUN corepack enable
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY packages/inertia-express/package.json packages/inertia-express/
+COPY packages/inertia-cache-redis/package.json packages/inertia-cache-redis/
+COPY packages/inertia-ssr-worker/package.json packages/inertia-ssr-worker/
+COPY examples/express-vue-prod/package.json examples/express-vue-prod/
+RUN pnpm install --frozen-lockfile
+
+FROM deps AS build
+COPY . .
+RUN pnpm -r --filter "./packages/*" build
+RUN pnpm --filter example-express-vue-prod build
+
+FROM node:20-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+RUN addgroup -S app && adduser -S app -G app
+COPY --from=build /repo /repo
+WORKDIR /repo/examples/express-vue-prod
+USER app
+EXPOSE 13714
+# SIGTERM triggers graceful drain inside createInertiaSsrWorker.
+STOPSIGNAL SIGTERM
+CMD ["node", "ssr/index.ts"]

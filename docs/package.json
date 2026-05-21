@@ -1,0 +1,29 @@
+{
+  "name": "inertia-express-docs",
+  "version": "0.0.0",
+  "description": "VitePress documentation site for @blacklizard/inertia-express.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "author": "blacklizard",
+  "homepage": "https://github.com/blacklizard/inertia-express#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blacklizard/inertia-express.git",
+    "directory": "docs"
+  },
+  "bugs": {
+    "url": "https://github.com/blacklizard/inertia-express/issues"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  }
+}

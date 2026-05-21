@@ -1,0 +1,42 @@
+{
+  "name": "example-express-vue",
+  "version": "0.0.0",
+  "description": "Example app: Inertia.js v3 + Express + Vue 3 with @blacklizard/inertia-express.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "author": "blacklizard",
+  "homepage": "https://github.com/blacklizard/inertia-express#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blacklizard/inertia-express.git",
+    "directory": "examples/express-vue"
+  },
+  "bugs": {
+    "url": "https://github.com/blacklizard/inertia-express/issues"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "concurrently \"vite\" \"tsx server/index.ts\"",
+    "server": "tsx server/index.ts",
+    "client": "vite"
+  },
+  "dependencies": {
+    "@blacklizard/inertia-express": "workspace:*",
+    "@inertiajs/vue3": "catalog:",
+    "express": "catalog:",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@inertiajs/vite": "catalog:",
+    "@types/express": "catalog:",
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "concurrently": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

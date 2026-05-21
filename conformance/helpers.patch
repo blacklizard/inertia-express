@@ -1,0 +1,151 @@
+diff --git a/tests/app/helpers.js b/tests/app/helpers.js
+index 06813da..702c387 100644
+--- a/tests/app/helpers.js
++++ b/tests/app/helpers.js
+@@ -1,10 +1,27 @@
++/**
++ * Conformance transport port.
++ *
++ * Page assembly is byte-for-byte identical to the upstream helpers.js; the only
++ * change is that partial-reload filtering + prop evaluation runs through
++ * @blacklizard/inertia-express's core `resolveProps` engine instead of the
++ * suite's inline `processPartialProps`. This exercises the adapter's protocol
++ * engine against the real Inertia client across the official Playwright specs.
++ *
++ * Upstream original kept at helpers.original.js.
++ */
+ const path = require('path')
+ const fs = require('fs')
++const { pathToFileURL } = require('url')
+ 
+ const package = process.env.PACKAGE || 'vue3'
+ 
+ const ssr = require('./ssr')
+ 
++// @blacklizard/inertia-express core build (ESM). Imported lazily because this
++// file is CommonJS; the promise is created once at module load.
++const CORE_PATH = path.resolve(__dirname, '../../../../packages/inertia-express/dist/core/index.js')
++const corePromise = import(pathToFileURL(CORE_PATH).href)
++
+ const buildPageData = (req, data) => ({
+   component: req.path
+     .slice(1)
+@@ -20,35 +37,36 @@ const buildPageData = (req, data) => ({
+   ...data,
+ })
+ 
+-const processPartialProps = (req, data) => {
+-  const partialDataHeader = req.headers['x-inertia-partial-data'] || ''
+-  const partialExceptHeader = req.headers['x-inertia-partial-except'] || ''
+-  const partialComponentHeader = req.headers['x-inertia-partial-component'] || ''
+-
+-  const isPartial = partialComponentHeader && partialComponentHeader === data.component
+-
+-  const partialDataKeys = partialDataHeader.split(',')
+-  const partialExceptKeys = partialExceptHeader.split(',')
+-
+-  data.props = Object.keys(data.props)
+-    .filter(
+-      (key) =>
+-        !isPartial ||
+-        !partialDataHeader ||
+-        partialDataKeys.some((partial) => partial === key || partial.startsWith(key + '.')),
+-    )
+-    .filter(
+-      (key) =>
+-        !isPartial ||
+-        !partialExceptHeader ||
+-        !partialExceptKeys.some((partial) => partial === key || partial.startsWith(key + '.')),
+-    )
+-    .reduce((carry, key) => {
+-      carry[key] = typeof data.props[key] === 'function' ? data.props[key](data.props) : data.props[key]
+-
+-      return carry
+-    }, {})
++/**
++ * Replacement for the upstream `processPartialProps`. Routes the page's props
++ * through the adapter's `resolveProps`: raw function props are wrapped as
++ * `lazy()` so the engine evaluates them (preserving the upstream calling
++ * convention of passing the full props object), then partial-reload filtering
++ * (including dotted-key matching) is applied by the engine.
++ */
++const processProps = async (req, data) => {
++  const core = await corePromise
++
++  const request = core.parseInertiaRequest({
++    headers: req.headers,
++    method: req.method,
++    url: req.originalUrl,
++  })
++
++  const sourceProps = data.props || {}
++  const wrapped = {}
++  for (const [key, value] of Object.entries(sourceProps)) {
++    wrapped[key] = typeof value === 'function' ? core.lazy(() => value(sourceProps)) : value
++  }
++
++  const resolved = await core.resolveProps({
++    props: wrapped,
++    shared: {},
++    component: data.component,
++    request,
++  })
+ 
++  data.props = resolved.props
+   return data
+ }
+ 
+@@ -62,7 +80,7 @@ const applyDefaultNonce = (req, html) => {
+ 
+ module.exports = {
+   package,
+-  render: (req, res, data) => {
++  render: async (req, res, data) => {
+     data = buildPageData(req, data)
+ 
+     if (data.component.startsWith('InfiniteScroll') && req.query.absolutePageUrl) {
+@@ -72,7 +90,7 @@ module.exports = {
+       data.url = `${protocol}://${host}${req.originalUrl}`
+     }
+ 
+-    data = processPartialProps(req, data)
++    data = await processProps(req, data)
+ 
+     if (data.alwaysProps) {
+       // To simulate Inertia::always() in the Laravel adapter...
+@@ -94,9 +112,9 @@ module.exports = {
+ 
+     return res.status(200).send(applyDefaultNonce(req, html))
+   },
+-  renderWithPlainTitle: (req, res, data) => {
++  renderWithPlainTitle: async (req, res, data) => {
+     data = buildPageData(req, data)
+-    data = processPartialProps(req, data)
++    data = await processProps(req, data)
+ 
+     if (req.get('X-Inertia')) {
+       res.header('Vary', 'Accept')
+@@ -112,9 +130,9 @@ module.exports = {
+ 
+     return res.status(200).send(applyDefaultNonce(req, html))
+   },
+-  renderUnified: (req, res, data) => {
++  renderUnified: async (req, res, data) => {
+     data = buildPageData(req, data)
+-    data = processPartialProps(req, data)
++    data = await processProps(req, data)
+ 
+     if (req.get('X-Inertia')) {
+       res.header('Vary', 'Accept')
+@@ -178,9 +196,9 @@ module.exports = {
+ 
+     return res.status(200).send(html)
+   },
+-  renderAuto: (req, res, data) => {
++  renderAuto: async (req, res, data) => {
+     data = buildPageData(req, data)
+-    data = processPartialProps(req, data)
++    data = await processProps(req, data)
+ 
+     if (req.get('X-Inertia')) {
+       res.header('Vary', 'Accept')

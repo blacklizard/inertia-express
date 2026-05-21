@@ -1,0 +1,87 @@
+{
+  "name": "@blacklizard/inertia-express",
+  "version": "0.1.0",
+  "description": "Inertia.js v3 server adapter for Node.js, with first-class Express support.",
+  "type": "module",
+  "license": "MIT",
+  "author": "blacklizard",
+  "homepage": "https://github.com/blacklizard/inertia-express/tree/main/packages/inertia-express#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blacklizard/inertia-express.git",
+    "directory": "packages/inertia-express"
+  },
+  "bugs": {
+    "url": "https://github.com/blacklizard/inertia-express/issues"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist/express/index.js",
+  "types": "./dist/express/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/express/index.d.ts",
+      "import": "./dist/express/index.js"
+    },
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
+    }
+  },
+  "bin": {
+    "inertia-prerender": "./bin/inertia-prerender.mjs"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm clean && pnpm build && pnpm test"
+  },
+  "peerDependencies": {
+    "express": "^4.18.0 || ^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "express": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@types/express": "catalog:",
+    "@types/express-serve-static-core": "^5.1.1",
+    "@types/node": "catalog:",
+    "@types/supertest": "^7.2.0",
+    "@vitest/coverage-v8": "^4.1.7",
+    "express": "catalog:",
+    "supertest": "^7.2.2",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "keywords": [
+    "inertia",
+    "inertia-js",
+    "inertiajs",
+    "express",
+    "adapter",
+    "ssr",
+    "spa",
+    "redis",
+    "cache",
+    "worker",
+    "load-balancer",
+    "self-healing"
+  ]
+}

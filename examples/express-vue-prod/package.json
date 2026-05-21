@@ -1,0 +1,48 @@
+{
+  "name": "example-express-vue-prod",
+  "version": "0.0.0",
+  "description": "Example app: production Inertia.js v3 setup — Express + Vue 3 + SSR worker + Redis cache.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "author": "blacklizard",
+  "homepage": "https://github.com/blacklizard/inertia-express#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blacklizard/inertia-express.git",
+    "directory": "examples/express-vue-prod"
+  },
+  "bugs": {
+    "url": "https://github.com/blacklizard/inertia-express/issues"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "vite build --outDir dist/client && vite build --ssr client/ssr.ts --outDir dist/server",
+    "start:web": "NODE_ENV=production node server/index.ts",
+    "start:ssr": "NODE_ENV=production node ssr/index.ts",
+    "dev:web": "tsx server/index.ts",
+    "dev:ssr": "tsx ssr/index.ts",
+    "prerender": "node ../../packages/inertia-express/bin/inertia-prerender.mjs --base-url http://localhost:3000 --route / --route /about --mode warmup"
+  },
+  "dependencies": {
+    "@blacklizard/inertia-cache-redis": "workspace:*",
+    "@blacklizard/inertia-express": "workspace:*",
+    "@blacklizard/inertia-ssr-worker": "workspace:*",
+    "@inertiajs/core": "catalog:",
+    "@inertiajs/vue3": "catalog:",
+    "express": "catalog:",
+    "redis": "catalog:",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@inertiajs/vite": "catalog:",
+    "@types/express": "catalog:",
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

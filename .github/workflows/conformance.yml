@@ -1,0 +1,37 @@
+name: Conformance
+
+# Runs the official inertiajs/inertia Playwright suite against the adapter.
+# Heavy (clones + builds the upstream monorepo, downloads a browser), so it is
+# its own workflow rather than part of the fast `ci` checks.
+#
+# Reproducible: the upstream suite is pinned to a fixed commit in
+# conformance/run.sh (override with the INERTIA_REF input on a manual run).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      inertia_ref:
+        description: Upstream inertiajs/inertia commit or branch to test against
+        required: false
+        default: ''
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run conformance suite (vue3)
+        run: pnpm test:conformance
+        env:
+          # Empty input falls back to the pinned ref in run.sh.
+          INERTIA_REF: ${{ github.event.inputs.inertia_ref }}

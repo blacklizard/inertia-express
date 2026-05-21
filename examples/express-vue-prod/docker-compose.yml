@@ -1,0 +1,53 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  ssr:
+    build:
+      context: ../..
+      dockerfile: examples/express-vue-prod/Dockerfile.ssr
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      SSR_PORT: 13714
+      SSR_MAX_REQUESTS: 1000
+      SSR_MAX_LIFETIME_SEC: 3600
+      SSR_MAX_RSS_MB: 512
+    deploy:
+      replicas: 2
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:13714/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  web:
+    build:
+      context: ../..
+      dockerfile: examples/express-vue-prod/Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      ssr:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # docker-compose round-robins DNS across replicas of `ssr`.
+      SSR_URL: http://ssr:13714/render
+      REDIS_URL: redis://redis:6379
+      MANIFEST_PATH: ./dist/client/.vite/manifest.json
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:3000/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
