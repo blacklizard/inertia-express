@@ -13,7 +13,7 @@ packages/
   inertia-express/      Core adapter. Framework-agnostic `core/` + `express/` wrapper.
   inertia-cache-redis/  Redis-backed SSR view cache store.
   inertia-ssr-worker/   Production SSR worker (health/readiness, recycling, drain).
-examples/               express-react, express-vue, express-vue-prod, express-vue-showcase
+examples/               express-react, express-vue, express-vue-kitchen-sink, express-vue-prod, express-vue-showcase
 docs/                   VitePress docs site.
 conformance/            Official inertiajs/inertia Playwright suite runner. See conformance/HOW-IT-WORKS.md.
 ```
@@ -45,7 +45,7 @@ Per-package: `cd packages/<name> && pnpm test` (or `test:watch`, `build`, `dev`,
 ## Stack
 
 - Node >= 24, ESM only (`"type": "module"` — use `.js` extensions in relative imports).
-- TypeScript 5.6, build via `tsup`.
+- TypeScript 5.6, build via `tsdown`.
 - Test: `vitest` + `supertest` for Express e2e.
 - Lint: ESLint flat config via `@blacklizard/eslint-blacklizard` (airbnb-extended, single quotes, 120 line width). `pnpm lint` scopes to `packages/*/src`. `eslint.config.mjs` extends the shared config and relaxes `max-depth` to 4.
 - Express peer dep: `^4.18.0 || ^5.0.0`.
