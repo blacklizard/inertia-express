@@ -1,22 +1,27 @@
 name: Release
 
-# Publishes all public packages to npm when a v* tag is pushed.
-# Requires an NPM_TOKEN repo secret (npm automation token with publish
-# rights to the @blacklizard scope).
+# Changesets-driven release. On push to main:
+#  - pending changesets present  -> opens/updates a "Version Packages" PR
+#    (bumps versions + writes CHANGELOGs).
+#  - that PR merged              -> publishes the bumped packages to npm.
+# Requires an NPM_TOKEN repo secret (npm token with publish rights to
+# the @blacklizard scope). GITHUB_TOKEN is provided automatically.
 
 on:
   push:
-    tags:
-      - "v*"
-  workflow_dispatch:
+    branches: [main]
 
 permissions:
-  contents: read
-  # Required for npm provenance (signed, verifiable publish attestation).
-  id-token: write
+  contents: write        # commit version bumps, push tags
+  pull-requests: write   # open the Version Packages PR
+  id-token: write        # npm provenance
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -25,13 +30,12 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - run: pnpm test
-      # pnpm skips any package whose version already exists on the registry,
-      # so re-running a tag is safe.
-      - run: pnpm -r publish --access public --no-git-checks
+      - uses: changesets/action@v1
+        with:
+          version: pnpm changeset version && pnpm install --lockfile-only
+          publish: pnpm changeset publish
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
