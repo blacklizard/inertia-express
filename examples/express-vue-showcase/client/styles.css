@@ -6,48 +6,50 @@
 /* shadcn-vue design tokens. The server renders <html class="dark">, so the
    `.dark` palette is what ships on first paint. */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.55 0.224 293.5);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.55 0.224 293.5);
+  --radius: 0.25rem;
+  /* Catppuccin Latte */
+  --background: #eff1f5; /* base */
+  --foreground: #4c4f69; /* text */
+  --card: #ffffff;
+  --card-foreground: #4c4f69;
+  --popover: #ffffff;
+  --popover-foreground: #4c4f69;
+  --primary: #1e66f5; /* blue */
+  --primary-foreground: #eff1f5;
+  --secondary: #ccd0da; /* surface0 */
+  --secondary-foreground: #4c4f69;
+  --muted: #e6e9ef; /* mantle */
+  --muted-foreground: #6c6f85; /* subtext0 */
+  --accent: #ccd0da; /* surface0 */
+  --accent-foreground: #4c4f69;
+  --destructive: #d20f39; /* red */
+  --destructive-foreground: #eff1f5;
+  --border: #bcc0cc; /* surface1 */
+  --input: #bcc0cc;
+  --ring: #1e66f5; /* blue */
 }
 
 .dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.682 0.187 293.5);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.682 0.187 293.5);
+  /* Catppuccin Mocha */
+  --background: #1e1e2e; /* base */
+  --foreground: #cdd6f4; /* text */
+  --card: #313244; /* surface0 */
+  --card-foreground: #cdd6f4;
+  --popover: #313244;
+  --popover-foreground: #cdd6f4;
+  --primary: #89b4fa; /* blue */
+  --primary-foreground: #1e1e2e;
+  --secondary: #45475a; /* surface1 */
+  --secondary-foreground: #cdd6f4;
+  --muted: #313244; /* surface0 */
+  --muted-foreground: #a6adc8; /* subtext0 */
+  --accent: #45475a; /* surface1 */
+  --accent-foreground: #cdd6f4;
+  --destructive: #f38ba8; /* red */
+  --destructive-foreground: #1e1e2e;
+  --border: #45475a; /* surface1 */
+  --input: #45475a;
+  --ring: #89b4fa; /* blue */
 }
 
 @theme inline {

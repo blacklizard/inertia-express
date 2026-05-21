@@ -12,6 +12,11 @@ const demos = [
   { href: "/merge", title: "Merge", blurb: "merge() pagination, deepMerge(), X-Inertia-Reset." },
   { href: "/history", title: "History", blurb: "clearHistory / encryptHistory page flags." },
   { href: "/form", title: "Form", blurb: "useForm POST, validation errors, 303 redirect, flash." },
+  { href: "/prefetch", title: "Prefetch", blurb: "Link prefetch on hover/mount, cacheFor caching." },
+  { href: "/poll", title: "Poll", blurb: "usePoll interval reloads with start/stop controls." },
+  { href: "/when-visible", title: "WhenVisible", blurb: "Load optional() props when scrolled into view." },
+  { href: "/head", title: "Head", blurb: "Per-page document title and meta tags via <Head>." },
+  { href: "/form-component", title: "Form component", blurb: "The v3 <Form> component with slot-prop errors." },
 ];
 </script>
 

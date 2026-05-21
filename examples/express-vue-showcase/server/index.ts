@@ -57,12 +57,15 @@ app.use(
       };
       const head = Array.isArray(ssr.head) ? ssr.head.join("") : (ssr.head ?? "");
       const root = ssr.body || '<div id="app"></div>';
+      // Emit the fallback <title> only when the page didn't render its own
+      // via <Head> — avoids a duplicate <title> in the document.
+      const fallbackTitle = head.includes("<title") ? "" : "<title>Inertia v3 Showcase</title>";
       return `<!doctype html>
 <html lang="en" class="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Inertia v3 Showcase</title>
+    ${fallbackTitle}
     ${head}
   </head>
   <body>
@@ -172,6 +175,88 @@ app.post("/form", (req, res) => {
   // redirected GET via `flashFromSession`, then cleared after one read.
   res.inertiaFlash({
     success: `Thanks, ${name} — message #${randomUUID().slice(0, 8)} received.`,
+  });
+  res.redirect("/");
+});
+
+app.get("/prefetch", async (_req, res) => {
+  await res.inertia("Prefetch", {});
+});
+
+app.get("/prefetch/detail", async (_req, res) => {
+  // Artificially slow — without prefetch this 600ms wait is felt on click;
+  // with `prefetch="hover"` / `"mount"` the client fetches ahead of time so
+  // the eventual visit resolves from cache instantly.
+  await new Promise((r) => setTimeout(r, 600));
+  await res.inertia("PrefetchDetail", {
+    fetchedAt: new Date().toISOString(),
+    quote: QUOTES[Math.floor(Math.random() * QUOTES.length)],
+  });
+});
+
+let pollTick = 0;
+app.get("/poll", async (_req, res) => {
+  // `usePoll` on the client issues a partial reload on an interval; each one
+  // hits this route and gets a fresh server value.
+  pollTick += 1;
+  await res.inertia("Poll", {
+    serverTime: new Date().toISOString(),
+    tick: pollTick,
+  });
+});
+
+app.get("/when-visible", async (_req, res) => {
+  await res.inertia("WhenVisible", {
+    intro: "Scroll down — the heavy panel loads only when it enters the viewport.",
+    // Optional prop: omitted from the initial response. The <WhenVisible>
+    // component triggers a partial reload naming `details` once it scrolls
+    // into view, which is when this callback finally runs.
+    details: optional(async () => {
+      await new Promise((r) => setTimeout(r, 500));
+      return {
+        loadedAt: new Date().toISOString(),
+        rows: Array.from({ length: 6 }, (_, i) => ({
+          id: i + 1,
+          label: `Lazily-loaded row #${i + 1}`,
+        })),
+      };
+    }),
+  });
+});
+
+app.get("/head", async (_req, res) => {
+  // Trivial route — the page itself manages <title>/<meta> via <Head>, and the
+  // SSR entry collects that head markup into the rendered document.
+  await res.inertia("Head", {});
+});
+
+app.get("/form-component", async (_req, res) => {
+  await res.inertia("FormComponent", {});
+});
+
+app.post("/form-component", (req, res) => {
+  const { name, email, message } = req.body as Record<string, string>;
+  const errors: Record<string, string> = {};
+  if (!name?.trim()) {
+    errors.name = "Name is required.";
+  }
+  if (!email?.includes("@")) {
+    errors.email = "A valid email is required.";
+  }
+  if (!message?.trim()) {
+    errors.message = "Message is required.";
+  }
+
+  if (Object.keys(errors).length > 0) {
+    // Same flow as /form: stash errors, redirect back. The v3 <Form> component
+    // surfaces them through its `errors` slot prop on the re-render.
+    res.inertiaErrors(errors);
+    res.redirect("/form-component");
+    return;
+  }
+
+  res.inertiaFlash({
+    success: `Thanks, ${name} — form #${randomUUID().slice(0, 8)} received via <Form>.`,
   });
   res.redirect("/");
 });

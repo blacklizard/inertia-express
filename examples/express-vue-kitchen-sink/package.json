@@ -1,0 +1,53 @@
+{
+  "name": "example-express-vue-kitchen-sink",
+  "version": "1.0.0",
+  "description": "Example app: the Inertia v3 kitchen-sink CRM demo ported to Express with @blacklizard/inertia-express.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "author": "blacklizard",
+  "homepage": "https://github.com/blacklizard/inertia-express#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blacklizard/inertia-express.git",
+    "directory": "examples/express-vue-kitchen-sink"
+  },
+  "bugs": {
+    "url": "https://github.com/blacklizard/inertia-express/issues"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "tsx watch server/index.ts",
+    "build": "vite build --outDir dist/client && vite build --ssr client/ssr.ts --outDir dist/server"
+  },
+  "dependencies": {
+    "@blacklizard/inertia-express": "workspace:*",
+    "@inertiajs/vue3": "catalog:",
+    "@vueuse/core": "^14.0.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "express": "catalog:",
+    "express-session": "^1.19.0",
+    "lucide-vue-next": "^0.470.0",
+    "multer": "^2.1.1",
+    "reka-ui": "^2.9.7",
+    "tailwind-merge": "^3.6.0",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@inertiajs/vite": "catalog:",
+    "@tailwindcss/vite": "^4.3.0",
+    "@types/express": "catalog:",
+    "@types/express-session": "^1.19.0",
+    "@types/multer": "^2.1.0",
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "tailwindcss": "^4.3.0",
+    "tsx": "catalog:",
+    "tw-animate-css": "^1.4.0",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}
