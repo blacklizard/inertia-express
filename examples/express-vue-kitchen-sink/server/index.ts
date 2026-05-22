@@ -47,7 +47,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(
   session({
-    secret: "kitchen-sink-dev-secret",
+    secret: process.env.SESSION_SECRET ?? "kitchen-sink-dev-secret",
     resave: false,
     saveUninitialized: false,
   }),
