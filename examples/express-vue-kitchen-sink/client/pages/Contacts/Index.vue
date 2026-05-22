@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Head, InfiniteScroll, Link, router } from '@inertiajs/vue3';
-import { Heart, Plus, Search } from 'lucide-vue-next';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { Heart, Loader2, Plus, Search } from 'lucide-vue-next';
 import { ref, watch } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,10 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import contactRoutes from '@/wayfinder/routes/contacts';
 import type { App, Inertia } from '@/wayfinder/types';
+
+type Contact = App.Models.Contact & {
+    organization?: Pick<App.Models.Organization, 'id' | 'name'> | null;
+};
 
 type CursorPaginated<T> = {
     data: T[];
@@ -20,14 +24,7 @@ type CursorPaginated<T> = {
 
 const props = defineProps<
     Omit<Inertia.Pages.Contacts.Index, 'contacts' | 'filters'> & {
-        contacts: CursorPaginated<
-            App.Models.Contact & {
-                organization?: Pick<
-                    App.Models.Organization,
-                    'id' | 'name'
-                > | null;
-            }
-        >;
+        contacts: CursorPaginated<Contact>;
         filters: { search: string; favorite: boolean };
     }
 >();
@@ -39,6 +36,20 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const search = ref(props.filters.search ?? '');
 const favoriteFilter = ref(props.filters.favorite);
+
+// Accumulated list across cursor pages. Reset on filter change, append on "Load more".
+const displayed = ref<Contact[]>([...props.contacts.data]);
+const nextPageUrl = ref(props.contacts.next_page_url);
+const loadingMore = ref(false);
+
+// When filters change the server sends a fresh first page — reset accumulator.
+watch(
+    () => props.contacts,
+    (fresh) => {
+        displayed.value = [...fresh.data];
+        nextPageUrl.value = fresh.next_page_url;
+    },
+);
 
 let searchTimeout: ReturnType<typeof setTimeout>;
 
@@ -68,6 +79,27 @@ function toggleFavoriteFilter() {
         only: ['contacts', 'filters'],
         reset: ['contacts'],
         preserveState: true,
+    });
+}
+
+/**
+ * Loads the next cursor page as a partial reload and appends results to
+ * `displayed`. Preserves scroll position so the user stays in place.
+ */
+function loadMore() {
+    if (!nextPageUrl.value || loadingMore.value) return;
+    loadingMore.value = true;
+    router.visit(nextPageUrl.value, {
+        only: ['contacts'],
+        preserveState: true,
+        preserveScroll: true,
+        onSuccess: () => {
+            displayed.value.push(...props.contacts.data);
+            nextPageUrl.value = props.contacts.next_page_url;
+        },
+        onFinish: () => {
+            loadingMore.value = false;
+        },
     });
 }
 </script>
@@ -114,15 +146,10 @@ function toggleFavoriteFilter() {
                 </Button>
             </div>
 
-            <!-- Contact List -->
-            <InfiniteScroll
-                data="contacts"
-                :buffer="300"
-                preserve-url
-                class="space-y-2"
-            >
+            <!-- Contact list -->
+            <div v-if="displayed.length > 0" class="space-y-2">
                 <Link
-                    v-for="contact in props.contacts.data"
+                    v-for="contact in displayed"
                     :key="contact.id"
                     :href="contactRoutes.show(contact.id).url"
                     prefetch="hover"
@@ -135,10 +162,9 @@ function toggleFavoriteFilter() {
                     </div>
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2">
-                            <span class="font-medium"
-                                >{{ contact.first_name }}
-                                {{ contact.last_name }}</span
-                            >
+                            <span class="font-medium">
+                                {{ contact.first_name }} {{ contact.last_name }}
+                            </span>
                             <Heart
                                 v-if="contact.is_favorite"
                                 class="size-3 shrink-0 fill-red-500 text-red-500"
@@ -153,17 +179,17 @@ function toggleFavoriteFilter() {
                     </Badge>
                 </Link>
 
-                <template #loading>
-                    <div class="flex justify-center py-4">
-                        <div class="text-sm text-muted-foreground">
-                            Loading more contacts...
-                        </div>
-                    </div>
-                </template>
-            </InfiniteScroll>
+                <!-- Load more -->
+                <div v-if="nextPageUrl" class="flex justify-center pt-2">
+                    <Button variant="outline" :disabled="loadingMore" @click="loadMore">
+                        <Loader2 v-if="loadingMore" class="size-4 animate-spin" />
+                        {{ loadingMore ? 'Loading…' : 'Load more' }}
+                    </Button>
+                </div>
+            </div>
 
             <div
-                v-if="props.contacts.data.length === 0"
+                v-else
                 class="flex flex-col items-center justify-center py-12 text-center"
             >
                 <p class="text-muted-foreground">No contacts found.</p>

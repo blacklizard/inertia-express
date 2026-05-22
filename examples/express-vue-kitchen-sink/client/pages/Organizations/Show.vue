@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Form, Head, InfiniteScroll, Link } from '@inertiajs/vue3';
-import { Building2 } from 'lucide-vue-next';
+import { Form, Head, Link, router } from '@inertiajs/vue3';
+import { Building2, Loader2 } from 'lucide-vue-next';
+import { ref, watch } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +31,40 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Organizations', href: organizationRoutes.index().url },
     { title: props.organization.name },
 ];
+
+// Accumulated member list across cursor pages.
+const displayed = ref<App.Models.Contact[]>([...props.contacts.data]);
+const nextPageUrl = ref(props.contacts.next_page_url);
+const loadingMore = ref(false);
+
+watch(
+    () => props.contacts,
+    (fresh) => {
+        displayed.value = [...fresh.data];
+        nextPageUrl.value = fresh.next_page_url;
+    },
+);
+
+/**
+ * Loads the next cursor page as a partial reload and appends the results to
+ * the displayed member list.
+ */
+function loadMore() {
+    if (!nextPageUrl.value || loadingMore.value) return;
+    loadingMore.value = true;
+    router.visit(nextPageUrl.value, {
+        only: ['contacts'],
+        preserveState: true,
+        preserveScroll: true,
+        onSuccess: () => {
+            displayed.value.push(...props.contacts.data);
+            nextPageUrl.value = props.contacts.next_page_url;
+        },
+        onFinish: () => {
+            loadingMore.value = false;
+        },
+    });
+}
 </script>
 
 <template>
@@ -113,14 +148,9 @@ const breadcrumbs: BreadcrumbItem[] = [
                     <CardTitle>Members</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <InfiniteScroll
-                        data="contacts"
-                        :buffer="300"
-                        preserve-url
-                        class="space-y-2"
-                    >
+                    <div v-if="displayed.length > 0" class="space-y-2">
                         <Link
-                            v-for="contact in props.contacts.data"
+                            v-for="contact in displayed"
                             :key="contact.id"
                             :href="contactRoutes.show(contact.id).url"
                             class="flex items-center gap-3 rounded-lg bg-muted/30 p-3 hover:bg-muted/50"
@@ -145,17 +175,16 @@ const breadcrumbs: BreadcrumbItem[] = [
                             </div>
                         </Link>
 
-                        <template #loading>
-                            <div class="flex justify-center py-4">
-                                <div class="text-sm text-muted-foreground">
-                                    Loading more...
-                                </div>
-                            </div>
-                        </template>
-                    </InfiniteScroll>
+                        <div v-if="nextPageUrl" class="flex justify-center pt-2">
+                            <Button variant="outline" :disabled="loadingMore" @click="loadMore">
+                                <Loader2 v-if="loadingMore" class="size-4 animate-spin" />
+                                {{ loadingMore ? 'Loading…' : 'Load more' }}
+                            </Button>
+                        </div>
+                    </div>
 
                     <div
-                        v-if="props.contacts.data.length === 0"
+                        v-else
                         class="py-4 text-center text-sm text-muted-foreground"
                     >
                         No contacts in this organization.
