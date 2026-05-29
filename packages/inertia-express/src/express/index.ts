@@ -69,5 +69,9 @@ export type {
   SsrRendererInput,
   SsrResult,
 } from './types.js';
-export type { ViteManifestVersionOptions } from './vite-manifest.js';
-export { viteManifestVersion } from './vite-manifest.js';
+export type {
+  ViteManifestAssets,
+  ViteManifestAssetsOptions,
+  ViteManifestVersionOptions,
+} from './vite-manifest.js';
+export { viteManifestAssets, viteManifestVersion } from './vite-manifest.js';
