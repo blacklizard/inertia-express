@@ -1,6 +1,6 @@
 {
   "name": "example-express-react",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Example app: Inertia.js v3 + Express + React with @blacklizard/inertia-express.",
   "private": true,
   "type": "module",
