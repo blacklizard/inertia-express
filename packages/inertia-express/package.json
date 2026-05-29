@@ -1,6 +1,6 @@
 {
   "name": "@blacklizard/inertia-express",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "description": "Inertia.js v3 server adapter for Node.js, with first-class Express support.",
   "type": "module",
   "license": "MIT",

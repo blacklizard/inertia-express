@@ -1,5 +1,12 @@
 # @blacklizard/inertia-cache-redis
 
+## 4.0.0
+
+### Patch Changes
+
+- Updated dependencies [776834d]
+  - @blacklizard/inertia-express@2.0.0
+
 ## 3.0.0
 
 ### Patch Changes
