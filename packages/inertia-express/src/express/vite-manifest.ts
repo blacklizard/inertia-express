@@ -212,8 +212,7 @@ export function viteManifestAssets(
       return EMPTY_ASSETS;
     }
 
-    const file = (entry as { file?: unknown }).file;
-    const cssList = (entry as { css?: unknown }).css;
+    const { file, css: cssList } = entry as { file?: unknown; css?: unknown };
     const firstCss = Array.isArray(cssList) && typeof cssList[0] === 'string' ? cssList[0] : null;
 
     const assets: ViteManifestAssets = {
