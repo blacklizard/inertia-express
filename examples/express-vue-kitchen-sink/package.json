@@ -1,6 +1,6 @@
 {
   "name": "example-express-vue-kitchen-sink",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Example app: the Inertia v3 kitchen-sink CRM demo ported to Express with @blacklizard/inertia-express.",
   "private": true,
   "type": "module",

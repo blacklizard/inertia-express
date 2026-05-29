@@ -1,5 +1,11 @@
 # @blacklizard/inertia-express
 
+## 1.2.0
+
+### Minor Changes
+
+- 8720e3c: Add `res.inertiaError(status, message?)` and `renderErrorPage({ status, message? })`. Inertia requests render the client `Error` component with the status as a prop; plain browser loads and render/SSR failures fall back to a minimal standalone HTML page, so users never see a raw JSON error.
+
 ## 1.1.1
 
 ### Patch Changes
