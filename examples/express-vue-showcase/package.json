@@ -1,6 +1,6 @@
 {
   "name": "example-express-vue-showcase",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Example app: feature showcase for @blacklizard/inertia-express with Express + Vue 3.",
   "private": true,
   "type": "module",

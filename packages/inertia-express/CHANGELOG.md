@@ -1,5 +1,11 @@
 # @blacklizard/inertia-express
 
+## 1.1.1
+
+### Patch Changes
+
+- Internal cleanup: destructure the entry fields in `viteManifestAssets` so the implementation satisfies `@typescript-eslint/prefer-destructuring`. No behaviour change.
+
 ## 1.1.0
 
 ### Minor Changes

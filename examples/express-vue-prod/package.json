@@ -1,6 +1,6 @@
 {
   "name": "example-express-vue-prod",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Example app: production Inertia.js v3 setup — Express + Vue 3 + SSR worker + Redis cache.",
   "private": true,
   "type": "module",

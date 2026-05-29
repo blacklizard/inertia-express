@@ -1,5 +1,13 @@
 # example-express-vue-prod
 
+## 1.0.2
+
+### Patch Changes
+
+- Updated dependencies
+  - @blacklizard/inertia-express@1.1.1
+  - @blacklizard/inertia-cache-redis@2.0.1
+
 ## 1.0.1
 
 ### Patch Changes
