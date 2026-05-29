@@ -73,13 +73,17 @@ describe("middleware view cache", () => {
     expect(r.headers["x-inertia-cache"]).toBeUndefined();
   });
 
-  it("skips cache when flash/errors props are present", async () => {
+  it("skips cache when top-level flash data is present", async () => {
     const ssr = vi.fn(async () => ({ body: "x" }));
     const app = express();
+    app.use((req, _res, next) => {
+      (req as unknown as { session: Record<string, unknown> }).session = { flash: { success: "hi" } };
+      next();
+    });
     app.use(
       inertia({
         ssr,
-        sharedProps: () => ({ flash: { success: "hi" } }),
+        flashFromSession: true,
         cache: { store: createMemoryCacheStore() },
       }),
     );

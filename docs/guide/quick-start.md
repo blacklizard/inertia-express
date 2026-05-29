@@ -26,7 +26,7 @@ app.use(
     sharedProps: (req) => ({
       auth: { user: req.user ?? null },
     }),
-    // Auto-promotes req.session.flash / req.session.errors into props.
+    // Promotes req.session.errors → `errors` prop, req.session.flash → top-level `flash` key.
     flashFromSession: true,
   }),
 );

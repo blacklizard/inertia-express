@@ -26,9 +26,10 @@ interface RenderContext {
 
 /**
  * Resolve the shared-props input for a request. When `flashFromSession` is
- * enabled, session-stored validation errors and flash data are merged in
- * automatically (read-once — they are cleared after being read). Explicit
- * `sharedProps` keys win on collision.
+ * enabled, session-stored validation errors are merged in as the `errors`
+ * shared prop (read-once — cleared after being read). Flash data is handled
+ * separately by {@link resolveFlashData} and surfaced as a top-level page key,
+ * not a prop. Explicit `sharedProps` keys win on collision.
  *
  * @param ctx Render context carrying the middleware options.
  * @param res Express response, scanned for `res.locals.inertiaErrors` as a
@@ -52,16 +53,39 @@ function composeSharedProps(ctx: RenderContext, res: Response): SharedPropsInput
     const errors = (session?.errors as PageProps | undefined)
       ?? (res.locals.inertiaErrors as PageProps | undefined)
       ?? {};
-    const flash = session?.flash ?? null;
 
     if (session) {
-      // Flash data is read-once: clear it so it does not leak into later visits.
+      // Validation errors are read-once: clear so they do not leak into later visits.
       session.errors = undefined;
-      session.flash = undefined;
     }
 
-    return { errors, flash, ...baseProps };
+    return { errors, ...baseProps };
   };
+}
+
+/**
+ * Pull read-once flash data off the session for this request. Unlike `errors`,
+ * flash is not a prop — inertia-laravel's `Response::resolveFlashData` exposes
+ * it as a top-level page key, so it is resolved here and passed to
+ * {@link buildPage} separately. Reading clears it so it does not leak into
+ * later visits. Returns `null` when `flashFromSession` is off or absent.
+ *
+ * @param ctx Render context carrying the middleware options.
+ * @param req Express request whose `session.flash` is read and cleared.
+ */
+function resolveFlashData(ctx: RenderContext, req: Request): unknown {
+  if (!ctx.options.flashFromSession) {
+    return null;
+  }
+
+  const { session } = (req as unknown as { session?: Record<string, unknown> });
+  const flash = session?.flash ?? null;
+
+  if (session) {
+    session.flash = undefined;
+  }
+
+  return flash;
 }
 
 /**
@@ -171,15 +195,14 @@ function defaultCacheVary(input: { req: Request; page: InertiaPage }): boolean {
     return false;
   }
 
+  // Flash is a top-level page key (not a prop); its presence means per-visit state.
+  if (page.flash !== undefined && page.flash !== null) {
+    return false;
+  }
+
   const props = page.props as Record<string, unknown>;
 
   if (props && typeof props === 'object') {
-    const flash = props.flash as Record<string, unknown> | undefined;
-
-    if (flash && Object.keys(flash).length > 0) {
-      return false;
-    }
-
     const errors = props.errors as Record<string, unknown> | undefined;
 
     if (errors && Object.keys(errors).length > 0) {
@@ -330,6 +353,7 @@ export async function sendInertiaResponse(
     req,
     shared: composeSharedProps(ctx, res),
     version,
+    flash: resolveFlashData(ctx, req),
     options: {
       clearHistory: options.clearHistory,
       encryptHistory: options.encryptHistory,

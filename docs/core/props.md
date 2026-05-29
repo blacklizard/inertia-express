@@ -88,11 +88,11 @@ Wrap a function to mark it as an always prop. Always props are included on **eve
 import { always } from "@blacklizard/inertia-express";
 
 await res.inertia("Dashboard", {
-  flash: always(() => req.session.flash),
+  auth: always(() => ({ user: req.user ?? null })),
 });
 ```
 
-**When to use:** Data that must reach the client on every visit even when a partial reload narrows the prop set — flash messages, auth state, CSRF tokens.
+**When to use:** Data that must reach the client on every visit even when a partial reload narrows the prop set — auth state, CSRF tokens. (Flash data is *not* a prop — use [`flashFromSession`](/core/middleware#flashfromsession), which exposes it as the top-level `flash` page key.)
 
 ## `merge(value, matchOn?)`
 
@@ -155,7 +155,7 @@ await res.inertia("Dashboard", {
   charts: defer(() => analytics.getChartData(), "charts"),
 
   // Always — included on every response, ignores partial filters
-  flash: always(() => req.session.flash),
+  auth: always(() => ({ user: req.user ?? null })),
 
   // Merge — appended on partial reload for pagination
   notifications: merge(await db.notifications.page(req.query.page), "id"),

@@ -69,7 +69,7 @@ always<T>(fn: () => T | Promise<T>): AlwaysProp<T>
 
 ```ts
 await res.inertia("Dashboard", {
-  flash: always(() => req.session.flash),
+  auth: always(() => ({ user: req.user ?? null })),
 });
 ```
 

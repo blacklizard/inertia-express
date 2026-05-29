@@ -78,7 +78,7 @@ Or use `flashFromSession: true` to have the middleware handle clearing automatic
 
 ## Flash messages
 
-Flash data is one-shot state — set it before a redirect, read it once on the next request. The middleware exposes two ways to set it; both store into `req.session.flash` and both surface as the `flash` shared prop when [`flashFromSession`](/core/middleware#flashfromsession) is on.
+Flash data is one-shot state — set it before a redirect, read it once on the next request. The middleware exposes two ways to set it; both store into `req.session.flash` and both surface as the **top-level `flash` page key** (a sibling of `props`, read on the client via `usePage().flash`) when [`flashFromSession`](/core/middleware#flashfromsession) is on. This mirrors inertia-laravel — flash is never a prop.
 
 ### `res.inertiaFlash(data)`
 
@@ -94,7 +94,8 @@ app.post("/profile", async (req, res) => {
 
 ```ts
 inertia({ flashFromSession: true });
-// → next GET renders with props.flash === { success: "Profile updated" }
+// → next GET renders with page.flash === { success: "Profile updated" }
+//    (top-level, read on the client via usePage().flash)
 ```
 
 ### `req.flash(type?, msg?)` — `connect-flash` compatible
@@ -128,14 +129,14 @@ This package is a one-to-one drop-in replacement:
 | `req.flash("info", "Hi %s", name)` | `req.flash("info", "Hi %s", name)` | Identical — `util.format` |
 | `req.flash("info")` | `req.flash("info")` | Identical — read + clear bucket |
 | `req.flash()` | `req.flash()` | Identical — read + clear all |
-| `res.render(view, { messages: req.flash() })` | `inertia({ flashFromSession: true })` | The `flash` prop is populated automatically — drop the manual getter |
+| `res.render(view, { messages: req.flash() })` | `inertia({ flashFromSession: true })` | The top-level `flash` page key is populated automatically — drop the manual getter |
 
 Migration steps:
 
 1. `pnpm remove connect-flash` (and `@types/connect-flash`).
 2. Delete `app.use(flash())` — the `inertia()` middleware already provides `req.flash`.
 3. Keep every `req.flash("type", "msg")` **setter** call as-is.
-4. Replace manual `req.flash()` **getter** reads in your render path with `flashFromSession: true`; the `flash` prop carries the buckets.
+4. Replace manual `req.flash()` **getter** reads in your render path with `flashFromSession: true`; the top-level `flash` page key carries the buckets (read it client-side with `usePage().flash`).
 
 ## `scopeErrors(errors, bag)`
 

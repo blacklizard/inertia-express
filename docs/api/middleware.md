@@ -100,7 +100,7 @@ res.inertiaErrors({ name: "required" }, "createUser"); // with bag
 
 ## `res.inertiaFlash(data)`
 
-Stash arbitrary flash data for the next request. Stored in `req.session.flash`; surfaced as the `flash` shared prop when `flashFromSession` is enabled. Replaces any flash already queued for this redirect. No-ops without a session.
+Stash arbitrary flash data for the next request. Stored in `req.session.flash`; surfaced as the top-level `flash` page key (a sibling of `props`, not a prop — read client-side via `usePage().flash`) when `flashFromSession` is enabled. Replaces any flash already queued for this redirect. No-ops without a session.
 
 ```ts
 res.inertiaFlash({ success: "Profile updated" });

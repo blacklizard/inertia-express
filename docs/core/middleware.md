@@ -128,13 +128,13 @@ CDN `Cache-Control` policy for non-Inertia responses. See [Edge Caching](/advanc
 
 ### `flashFromSession`
 
-When `true`, auto-promotes `req.session.errors` and `req.session.flash` into shared props as `errors` and `flash`, then clears them after read (read-once). Off by default — most apps wire flash/errors via `sharedProps`.
+When `true`, auto-promotes `req.session.errors` into the `errors` shared prop and `req.session.flash` into the **top-level `flash` page key** (a sibling of `props`, not a prop — matching inertia-laravel's `Response::resolveFlashData`), then clears both after read (read-once). Read it on the client with `usePage().flash`. Off by default — most apps wire flash/errors via `sharedProps`.
 
 ```ts
 inertia({ flashFromSession: true });
 ```
 
-With this on, the flash helpers feed the page props with no extra wiring:
+With this on, the flash helpers feed the page's top-level `flash` with no extra wiring:
 
 ```ts
 // connect-flash style — accumulates { type: string[] }

@@ -54,9 +54,9 @@ inertia({
   sharedProps: async (req) => ({
     auth: { user: req.user ?? null },
     csrf: req.csrfToken?.(),
-    flash: req.session?.flash ?? {},
-    errors: req.session?.errors ?? {},
   }),
+  // Errors → `errors` prop, flash → top-level `flash` page key, both read-once.
+  flashFromSession: true,
 });
 ```
 

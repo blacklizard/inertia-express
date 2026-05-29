@@ -17,6 +17,11 @@ export interface BuildPageInput<TReq = unknown> {
   shared: SharedPropsInput<TReq> | undefined;
   version: string | null;
   options?: RenderOptions;
+  /**
+   * Read-once flash data to emit as a top-level page key. Resolved by the
+   * caller (e.g. from the session); omitted from the page when nullish/empty.
+   */
+  flash?: unknown;
 }
 
 /**
@@ -72,5 +77,6 @@ export async function buildPage<TReq>(input: BuildPageInput<TReq>): Promise<Iner
     mergeProps: resolved.merge,
     deepMergeProps: resolved.deepMerge,
     matchPropsOn: resolved.matchOn,
+    flash: input.flash,
   });
 }

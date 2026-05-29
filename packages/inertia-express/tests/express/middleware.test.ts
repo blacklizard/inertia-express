@@ -525,13 +525,15 @@ describe("flashFromSession", () => {
     return app;
   }
 
-  it("merges session errors and flash into shared props", async () => {
+  it("merges session errors into props and surfaces flash as a top-level page key", async () => {
     const app = appWithSession({ errors: { name: "required" }, flash: "saved" }, { flashFromSession: true });
     app.get("/", (_req, res) => void res.inertia("X", {}));
     const r = await request(app).get("/").set("x-inertia", "true");
     const body = JSON.parse(r.text);
     expect(body.props.errors).toEqual({ name: "required" });
-    expect(body.props.flash).toBe("saved");
+    // Flash is a sibling of `props`, never a prop (matches inertia-laravel).
+    expect(body.flash).toBe("saved");
+    expect(body.props.flash).toBeUndefined();
   });
 
   it("clears session flash data after reading (read-once)", async () => {
@@ -543,23 +545,27 @@ describe("flashFromSession", () => {
     expect(session.flash).toBeUndefined();
   });
 
-  it("lets explicit sharedProps win over session flash", async () => {
+  it("keeps session flash (top-level) and an explicit `flash` shared prop independent", async () => {
     const app = appWithSession(
       { flash: "from-session" },
       { flashFromSession: true, sharedProps: () => ({ flash: "from-shared" }) },
     );
     app.get("/", (_req, res) => void res.inertia("X", {}));
     const r = await request(app).get("/").set("x-inertia", "true");
-    expect(JSON.parse(r.text).props.flash).toBe("from-shared");
+    const body = JSON.parse(r.text);
+    // No collision: session flash lands top-level, a same-named prop stays a prop.
+    expect(body.flash).toBe("from-session");
+    expect(body.props.flash).toBe("from-shared");
   });
 
-  it("defaults errors to {} and flash to null when the session is empty", async () => {
+  it("defaults errors to {} and omits the flash key when the session is empty", async () => {
     const app = appWithSession({}, { flashFromSession: true });
     app.get("/", (_req, res) => void res.inertia("X", {}));
     const r = await request(app).get("/").set("x-inertia", "true");
     const body = JSON.parse(r.text);
     expect(body.props.errors).toEqual({});
-    expect(body.props.flash).toBeNull();
+    expect(body.props.flash).toBeUndefined();
+    expect("flash" in body).toBe(false);
   });
 
   it("does not inject errors/flash when flashFromSession is off", async () => {
@@ -601,9 +607,9 @@ describe("flashFromSession", () => {
     await request(app).post("/submit");
     expect(session.flash).toEqual({ notice: "Profile updated" });
 
-    // GET — flash surfaced in props, then cleared (read-once).
+    // GET — flash surfaced as a top-level page key, then cleared (read-once).
     const r = await request(app).get("/").set("x-inertia", "true");
-    expect(JSON.parse(r.text).props.flash).toEqual({ notice: "Profile updated" });
+    expect(JSON.parse(r.text).flash).toEqual({ notice: "Profile updated" });
     expect(session.flash).toBeUndefined();
   });
 });
@@ -726,7 +732,7 @@ describe("req.flash (connect-flash compat)", () => {
     expect(thrown?.message).toBe("req.flash() requires sessions");
   });
 
-  it("connect-flash setter feeds the flash shared prop via flashFromSession", async () => {
+  it("connect-flash setter feeds the top-level flash key via flashFromSession", async () => {
     const session: Record<string, unknown> = {};
     const app = appWithSession(session, { flashFromSession: true });
     app.post("/submit", (req, res) => {
@@ -739,7 +745,7 @@ describe("req.flash (connect-flash compat)", () => {
     expect(session.flash).toEqual({ success: ["Saved!"] });
 
     const r = await request(app).get("/").set("x-inertia", "true");
-    expect(JSON.parse(r.text).props.flash).toEqual({ success: ["Saved!"] });
+    expect(JSON.parse(r.text).flash).toEqual({ success: ["Saved!"] });
     expect(session.flash).toBeUndefined();
   });
 });

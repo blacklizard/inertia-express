@@ -45,6 +45,12 @@ export interface InertiaPage<TProps extends PageProps = PageProps> {
    * when merging arrays of objects (used to dedupe rather than blindly append).
    */
   matchPropsOn?: string[];
+  /**
+   * Read-once flash data, surfaced as a *top-level* page key (sibling to
+   * `props`) rather than a prop — mirroring inertia-laravel's
+   * `Response::resolveFlashData`. Omitted entirely when there is no flash.
+   */
+  flash?: unknown;
 }
 
 /**
