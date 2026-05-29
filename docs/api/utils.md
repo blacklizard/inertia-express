@@ -49,6 +49,59 @@ inertia({
 
 ---
 
+## `viteManifestAssets(options)`
+
+Resolves the CSS and JS web URLs for a single Vite manifest entry. Pair with `viteManifestVersion` so the root view can render `<link>` and `<script>` tags without hand-rolling a manifest reader.
+
+```ts
+import { viteManifestAssets } from "@blacklizard/inertia-express";
+
+viteManifestAssets(options: ViteManifestAssetsOptions): () => Promise<ViteManifestAssets>
+```
+
+### `ViteManifestAssetsOptions`
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `manifestPath` | — | Path to the Vite manifest JSON file |
+| `entry` | — | Manifest key for the entry to resolve, e.g. `src/app.ts` |
+| `watchMtime` | `true` | Re-read on file mtime change. `false` reads once on boot. |
+
+### `ViteManifestAssets`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `css` | `string \| null` | First CSS file declared by the entry as a web path (leading `/`), or `null` when absent |
+| `js` | `string \| null` | Compiled JS file as a web path, or `null` when absent |
+
+Returns `{ css: null, js: null }` when the manifest is missing, unparseable, or the entry key is absent — the root view stays renderable while assets are still being built.
+
+```ts
+const resolveAssets = viteManifestAssets({
+  manifestPath: "public/build/.vite/manifest.json",
+  entry: "src/app.ts",
+});
+
+inertia({
+  rootView: async ({ page }) => {
+    const { css, js } = await resolveAssets();
+    return `
+      <!doctype html>
+      <html>
+        <head>${css ? `<link rel="stylesheet" href="${css}">` : ""}</head>
+        <body>
+          <div id="app"></div>
+          <script data-page="app" type="application/json">${encodePageScript(page)}</script>
+          ${js ? `<script type="module" src="${js}"></script>` : ""}
+        </body>
+      </html>
+    `;
+  },
+});
+```
+
+---
+
 ## `applyEdgeCache(decision, res)`
 
 Apply a CDN cache decision directly to any Express response.

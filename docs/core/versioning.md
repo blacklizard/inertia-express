@@ -57,6 +57,10 @@ app.use(
 
 The asset version is incorporated into SSR cache keys. When a deploy bumps the version, every existing cache entry is retired automatically — no manual cache invalidation needed.
 
+### Companion: `viteManifestAssets`
+
+The same manifest also tells the root view *which* CSS/JS files to load. Rather than hand-rolling another manifest reader, pair the version helper with `viteManifestAssets` — see [`API: Utilities → viteManifestAssets`](/api/utils#vitemanifestassets-options) for the full signature.
+
 ## Manual version management
 
 Read the manifest or any build artifact yourself:

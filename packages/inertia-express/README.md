@@ -360,6 +360,34 @@ inertia({
 
 `watchMtime: false` reads once on boot — slightly faster but requires a process restart to pick up new builds.
 
+### Asset URLs for the root view
+
+`viteManifestAssets` resolves the CSS and JS web URLs for a single manifest entry so the root view can stamp `<link>` and `<script>` tags without re-implementing manifest parsing. Same mtime caching as `viteManifestVersion`.
+
+```ts
+import { encodePageScript, viteManifestAssets } from "@blacklizard/inertia-express";
+
+const resolveAssets = viteManifestAssets({
+  manifestPath: "public/build/.vite/manifest.json",
+  entry: "src/app.ts",
+});
+
+inertia({
+  rootView: async ({ page }) => {
+    const { css, js } = await resolveAssets();
+    return `<!doctype html>
+<html><head>${css ? `<link rel="stylesheet" href="${css}">` : ""}</head>
+<body>
+  <div id="app"></div>
+  <script data-page="app" type="application/json">${encodePageScript(page)}</script>
+  ${js ? `<script type="module" src="${js}"></script>` : ""}
+</body></html>`;
+  },
+});
+```
+
+Returns `{ css: null, js: null }` when the manifest is missing, unparseable, or the entry key is absent — the root view stays renderable while assets are still being built. CSS is the first entry from the `css[]` array; if your entry emits multiple CSS files and you need them all, read the manifest yourself.
+
 ## Prerender / static export
 
 Two output modes (combinable):
