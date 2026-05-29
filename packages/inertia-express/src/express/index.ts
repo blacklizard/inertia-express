@@ -39,6 +39,8 @@ export {
   merge,
   optional,
 } from '../core/index.js';
+export type { ErrorPageInput } from '../core/index.js';
+export { renderErrorPage } from '../core/index.js';
 export type { EdgeCacheDecision, EdgeCachePolicy } from './edge-cache.js';
 export { applyEdgeCache } from './edge-cache.js';
 export type { MemoryCacheStoreOptions } from './memory-store.js';

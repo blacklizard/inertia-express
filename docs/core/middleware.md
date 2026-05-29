@@ -180,3 +180,34 @@ req.flash();                        // getter → all buckets, clears them
 | `res.inertiaLocation(url)` | External redirect (409 for Inertia, 302 for browser) |
 | `res.inertiaErrors(errors, bag?)` | Stash validation errors for the next request |
 | `res.inertiaFlash(data)` | Stash arbitrary flash data for the next request |
+| `res.inertiaError(status, message?)` | Render an error page at the given HTTP status |
+
+### `res.inertiaError(status, message?)`
+
+Renders an error page at the given HTTP status. Use it from a central error
+handler so routes can simply `throw` and let the handler decide how an error
+surfaces to the user.
+
+```ts
+res.inertiaError(404);
+res.inertiaError(500, "Something went wrong on our end");
+```
+
+- **Inertia request** → renders the client `Error` component via
+  `res.inertia("Error", { status })`, with the resolved HTTP status on the
+  response. The component reads `status` from its props to decide what to show.
+- **Plain browser load** (non-Inertia), or a **render/SSR failure** on the
+  Inertia path → falls back to a minimal standalone HTML page built by
+  [`renderErrorPage`](#rendererrorpage), so the user never sees a raw JSON
+  error or a blank screen even when the SPA cannot mount.
+
+The `message` argument only affects the standalone HTML fallback; the Inertia
+path passes just `status` to the `Error` component.
+
+### `renderErrorPage({ status, message? })`
+
+Standalone, SPA-less HTML error page used as the hard fallback by
+`res.inertiaError`. Exported from both `@blacklizard/inertia-express` and
+`@blacklizard/inertia-express/core` so you can render it directly (e.g. from a
+framework-agnostic adapter). `message` defaults to a sensible label for common
+statuses, then to a generic line; all interpolated values are HTML-escaped.

@@ -458,6 +458,61 @@ describe("inertia middleware", () => {
   });
 });
 
+describe("res.inertiaError", () => {
+  it("renders the Error component as Inertia JSON with the status prop", async () => {
+    const app = buildApp();
+    app.get("/missing", (_req, res) => {
+      void res.inertiaError(404);
+    });
+    const r = await request(app).get("/missing").set("x-inertia", "true");
+    expect(r.status).toBe(404);
+    expect(r.headers["content-type"]).toMatch(/application\/json/);
+    expect(r.headers["x-inertia"]).toBe("true");
+    const body = JSON.parse(r.text);
+    expect(body.component).toBe("Error");
+    expect(body.props.status).toBe(404);
+  });
+
+  it("renders standalone HTML for plain browser loads", async () => {
+    const app = buildApp();
+    app.get("/missing", (_req, res) => {
+      void res.inertiaError(404);
+    });
+    const r = await request(app).get("/missing");
+    expect(r.status).toBe(404);
+    expect(r.headers["content-type"]).toMatch(/text\/html/);
+    expect(r.text).toContain("<h1>404</h1>");
+    expect(r.text).toContain("Page Not Found");
+    expect(r.text).not.toContain("data-page=");
+  });
+
+  it("uses the explicit message in the HTML fallback", async () => {
+    const app = buildApp();
+    app.get("/denied", (_req, res) => {
+      void res.inertiaError(403, "No access for you");
+    });
+    const r = await request(app).get("/denied");
+    expect(r.status).toBe(403);
+    expect(r.text).toContain("No access for you");
+  });
+
+  it("falls back to standalone HTML when the Inertia render throws", async () => {
+    const app = buildApp({
+      sharedProps: () => {
+        throw new Error("render boom");
+      },
+    });
+    app.get("/boom", (_req, res) => {
+      void res.inertiaError(500);
+    });
+    const r = await request(app).get("/boom").set("x-inertia", "true");
+    expect(r.status).toBe(500);
+    expect(r.headers["content-type"]).toMatch(/text\/html/);
+    expect(r.text).toContain("<h1>500</h1>");
+    expect(r.text).toContain("Server Error");
+  });
+});
+
 describe("flashFromSession", () => {
   function appWithSession(session: Record<string, unknown>, opts: Parameters<typeof inertia>[0]) {
     const app = express();

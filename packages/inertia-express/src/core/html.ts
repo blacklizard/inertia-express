@@ -104,3 +104,65 @@ export function renderDefaultHtml(input: DefaultRootViewInput): string {
   </body>
 </html>`;
 }
+
+/** Default user-facing messages keyed by HTTP status, used when none is given. */
+const ERROR_STATUS_MESSAGES: Record<number, string> = {
+  400: 'Bad Request',
+  401: 'Unauthorized',
+  403: 'Forbidden',
+  404: 'Page Not Found',
+  409: 'Conflict',
+  419: 'Page Expired',
+  422: 'Unprocessable Entity',
+  429: 'Too Many Requests',
+  500: 'Server Error',
+  502: 'Bad Gateway',
+  503: 'Service Unavailable',
+  504: 'Gateway Timeout',
+};
+
+/**
+ * Inputs to {@link renderErrorPage}.
+ */
+export interface ErrorPageInput {
+  /** HTTP status code to surface to the user. */
+  status: number;
+  /** Optional message; falls back to a default for the status, then a generic line. */
+  message?: string;
+}
+
+/**
+ * Render a minimal, SPA-less standalone HTML error page. Used as the hard
+ * fallback when no client `Error` component can be resolved (e.g. a plain
+ * browser load, or an SSR/render failure on the Inertia path), so a user
+ * never receives a raw JSON error or a blank page.
+ *
+ * @param input HTTP status plus an optional override message — see {@link ErrorPageInput}.
+ */
+export function renderErrorPage(input: ErrorPageInput): string {
+  const { status } = input;
+  const message = input.message ?? ERROR_STATUS_MESSAGES[status] ?? 'Something went wrong';
+  const safeStatus = escapeHtmlAttribute(String(status));
+  const safeMessage = escapeHtmlAttribute(message);
+
+  return `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${safeStatus} ${safeMessage}</title>
+    <style>
+      body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f8f9fa; color: #212529; }
+      main { text-align: center; padding: 2rem; }
+      h1 { font-size: 4rem; margin: 0; font-weight: 600; }
+      p { font-size: 1.25rem; margin: 0.5rem 0 0; color: #6c757d; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>${safeStatus}</h1>
+      <p>${safeMessage}</p>
+    </main>
+  </body>
+</html>`;
+}

@@ -186,6 +186,9 @@ export type ResInertiaApi = <TProps extends PageProps>(
 /** Helper to declare typed redirects on the response. */
 export type InertiaLocation = (url: string) => void;
 
+/** Render an error page at the given HTTP status. See {@link Response.inertiaError}. */
+export type InertiaErrorRenderer = (status: number, message?: string) => Promise<void>;
+
 /**
  * Express-compatible middleware signature that may return a Promise (so
  * `async` handlers can be `.use()`-mounted directly).
@@ -239,6 +242,13 @@ declare module 'express-serve-static-core' {
      * No-ops when no session is wired.
      */
     inertiaFlash: (data: Record<string, unknown>) => void;
+    /**
+     * Render an error page at the given HTTP status. Inertia requests render
+     * the client `Error` component with `status` as a prop; plain loads and
+     * render failures fall back to a standalone HTML page. See
+     * {@link InertiaErrorRenderer}.
+     */
+    inertiaError: InertiaErrorRenderer;
   }
 }
 

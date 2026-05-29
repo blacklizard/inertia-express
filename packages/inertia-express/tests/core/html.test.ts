@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodePageScript, renderDefaultHtml } from "../../src/core/html.js";
+import { encodePageScript, renderDefaultHtml, renderErrorPage } from "../../src/core/html.js";
 import type { InertiaPage } from "../../src/core/index.js";
 
 const page: InertiaPage = {
@@ -71,5 +71,39 @@ describe("renderDefaultHtml", () => {
   it("omits the client module script when scriptSrc is not given", () => {
     const html = renderDefaultHtml({ page });
     expect(html).not.toContain('type="module"');
+  });
+});
+
+describe("renderErrorPage", () => {
+  it("renders the status and a default message for a known status", () => {
+    const html = renderErrorPage({ status: 404 });
+    expect(html).toContain("<h1>404</h1>");
+    expect(html).toContain("Page Not Found");
+    expect(html).toContain("<title>404 Page Not Found</title>");
+  });
+
+  it("uses a generic message for an unmapped status", () => {
+    const html = renderErrorPage({ status: 418 });
+    expect(html).toContain("<h1>418</h1>");
+    expect(html).toContain("Something went wrong");
+  });
+
+  it("prefers an explicit message over the status default", () => {
+    const html = renderErrorPage({ status: 500, message: "Boom" });
+    expect(html).toContain("<h1>500</h1>");
+    expect(html).toContain("Boom");
+    expect(html).not.toContain("Server Error");
+  });
+
+  it("emits no SPA root div or page script (standalone, SPA-less)", () => {
+    const html = renderErrorPage({ status: 500 });
+    expect(html).not.toContain("data-page=");
+    expect(html).not.toContain('id="app"');
+  });
+
+  it("escapes the message so it cannot break out of the markup", () => {
+    const html = renderErrorPage({ status: 400, message: "<script>x</script>" });
+    expect(html).not.toContain("<script>x</script>");
+    expect(html).toContain("&lt;script&gt;");
   });
 });

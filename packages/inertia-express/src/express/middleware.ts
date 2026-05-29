@@ -1,7 +1,9 @@
 import { format } from 'node:util';
 
 import { sendInertiaLocation, sendInertiaResponse } from './response.js';
-import { inertiaRedirectStatus, parseInertiaRequest, scopeErrors } from '../core/index.js';
+import {
+  inertiaRedirectStatus, parseInertiaRequest, renderErrorPage, scopeErrors,
+} from '../core/index.js';
 
 import type { NextFunction, Request, Response } from 'express';
 
@@ -77,6 +79,7 @@ function createFlash(req: Request): Request['flash'] {
  *   - Adds `res.inertiaLocation(url)` for external redirects.
  *   - Adds `res.inertiaErrors(errors, bag?)` to flash validation errors.
  *   - Adds `res.inertiaFlash(data)` to flash arbitrary data.
+ *   - Adds `res.inertiaError(status, message?)` to render an error page.
  *   - Auto-promotes redirects after PUT/PATCH/DELETE to 303 for Inertia visits.
  *
  * Mount before your route handlers:
@@ -142,6 +145,29 @@ export function inertia(options: InertiaMiddlewareOptions = {}) {
 
       if (session) {
         session.flash = data;
+      }
+    };
+
+    // res.inertiaError() — render an error page at the given HTTP status.
+    // Inertia requests render the client `Error` component (status passed as a
+    // prop); on a render/SSR failure, or for plain browser loads, it falls back
+    // to a standalone HTML page so the user never sees a raw JSON error.
+    res.inertiaError = async (status: number, message?: string): Promise<void> => {
+      res.status(status);
+
+      if (req.inertia?.isInertia) {
+        try {
+          await sendInertiaResponse(req, res, ctx, 'Error', { status }, {});
+
+          return;
+        } catch {
+          // Error component unresolved or SSR failed — fall through to the
+          // standalone HTML fallback below.
+        }
+      }
+
+      if (!res.headersSent) {
+        res.status(status).type('html').send(renderErrorPage({ status, message }));
       }
     };
 
