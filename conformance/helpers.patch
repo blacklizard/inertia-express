@@ -64,9 +64,9 @@ index 06813da..702c387 100644
 -    }, {})
 +/**
 + * Replacement for the upstream `processPartialProps`. Routes the page's props
-+ * through the adapter's `resolveProps`: raw function props are wrapped as
-+ * `lazy()` so the engine evaluates them (preserving the upstream calling
-+ * convention of passing the full props object), then partial-reload filtering
++ * through the adapter's `resolveProps`: function props stay BARE closures
++ * (only arity-adapted — upstream routes author them as `(props) => …`), so
++ * the engine must handle bare closures itself; partial-reload filtering
 + * (including dotted-key matching) is applied by the engine.
 + */
 +const processProps = async (req, data) => {
@@ -81,7 +81,7 @@ index 06813da..702c387 100644
 +  const sourceProps = data.props || {}
 +  const wrapped = {}
 +  for (const [key, value] of Object.entries(sourceProps)) {
-+    wrapped[key] = typeof value === 'function' ? core.lazy(() => value(sourceProps)) : value
++    wrapped[key] = typeof value === 'function' ? () => value(sourceProps) : value
 +  }
 +
 +  const resolved = await core.resolveProps({
