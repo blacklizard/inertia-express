@@ -17,7 +17,7 @@ INERTIA="$CONF/inertia"
 
 # Pinned so every run tests the exact same upstream suite — reproducible CI.
 # Override with INERTIA_REF=master to test against the latest upstream.
-INERTIA_REF="${INERTIA_REF:-3a015228de09ba1838e08a22d24e5a6938cccc63}"
+INERTIA_REF="${INERTIA_REF:-ca14edecf73ece19aa9737f2681b046e09b39279}"
 
 # 1. Build the adapter — the ported helpers import its core dist, so a stale
 #    build would silently test old code.
