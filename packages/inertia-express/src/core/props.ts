@@ -317,10 +317,12 @@ export async function resolveProps(input: ResolvePropsInput): Promise<ResolvePro
   const evaluated: PageProps = {};
 
   // Evaluate every function-shaped prop; independent props resolve in parallel.
+  // ANY function is a closure prop — tagged (lazy/optional/defer/always) or
+  // bare. The reference server and inertia-laravel both resolve untagged
+  // closures; gating on tags silently dropped bare closures from the payload.
   const resolvedEntries = await Promise.all(
     Object.entries(filtered).map(async ([key, value]): Promise<readonly [string, unknown]> => {
-      const needsEval = isLazy(value) || isOptional(value) || isDeferred(value) || isAlways(value);
-      const resolved: unknown = needsEval ? await (value as () => unknown)() : value;
+      const resolved: unknown = typeof value === 'function' ? await (value as () => unknown)() : value;
 
       return [key, resolved] as const;
     }),
