@@ -58,7 +58,7 @@ inertia({
 
 ### Error bags remap at read time
 
-`res.inertiaErrors(errors, bag)` stores each bag as-is under `req.session.inertia.errors[bag]` (bag `default` when omitted); nothing is scoped at write time. The `errors` prop is built when the next page is rendered: errors stored without a bag come back flat, unless the request carries `X-Inertia-Error-Bag`, in which case they are nested under that name; named bags always come back keyed by name. This matches inertia-laravel's `Middleware::resolveValidationErrors`, so the client that asked for a bag gets it even though the handler never named one. Send `X-Inertia-Error-Bag` from the form (the `errorBag` visit option), or read `errors[bag]` when the handler passed a bag name. See [Error bags](/core/redirects#error-bags).
+`res.inertiaErrors(errors, bag)` stores each bag as-is under `req.session.inertia.errors[bag]` (bag `default` when omitted); nothing is scoped at write time. The `errors` prop is built when the next page is rendered: errors stored without a bag (the `default` bag) come back flat, unless the request carries `X-Inertia-Error-Bag`, in which case they are nested under that name. Named bags come back keyed by name only when no `default` bag is stored; when `default` is stored too, only `default` is returned and the named bags are dropped. This matches inertia-laravel's `Middleware::resolveValidationErrors`, so the client that asked for a bag gets it even though the handler never named one. Send `X-Inertia-Error-Bag` from the form (the `errorBag` visit option), or read `errors[bag]` when the handler passed a bag name. See [Error bags](/core/redirects#error-bags).
 
 ```ts
 res.inertiaErrors({ email: "invalid" });

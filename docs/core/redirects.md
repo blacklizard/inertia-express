@@ -15,7 +15,7 @@ You don't need to do anything special — the middleware wraps `res.redirect` au
 
 ### Redirects with URL fragments
 
-Browsers drop the `#fragment` when they follow a redirect for an XHR request, so a plain redirect to `/article#section` would land the client on `/article`. On an Inertia request, a `res.redirect()` whose target contains `#` is answered with `409`, an `X-Inertia-Redirect: <url>` header and an empty body instead; the Inertia client then visits that URL itself and keeps the fragment. This is a port of inertia-laravel's `Middleware::onRedirectWithFragment`.
+Browsers drop the `#fragment` when they follow a redirect for an XHR request, so a plain redirect to `/article#section` would land the client on `/article`. On an Inertia request, a `res.redirect()` whose target contains `#` is answered with `409` whatever status was passed (an explicit `res.redirect(301, "/a#b")` is intercepted too), an `X-Inertia-Redirect: <url>` header and an empty body instead; the Inertia client then visits that URL itself and keeps the fragment. This is a port of inertia-laravel's `Middleware::onRedirectWithFragment`.
 
 ```ts
 app.post("/comments", async (req, res) => {
@@ -180,7 +180,7 @@ Migration steps:
 
 ## `scopeErrors(errors, bag)`
 
-Low-level helper that wraps errors in the bag namespace. The middleware no longer uses it (bags are stored as-is and remapped at read time, see [Error bags](#error-bags)); it is still exported:
+Low-level helper that wraps errors in the bag namespace. The middleware no longer uses it (bags are stored as-is and remapped at read time, see [Error bags](#error-bags)); it is still exported. The `{ errors: { bag: … } }` it returns is the helper's own shape, not how `res.inertiaErrors` stores bags now:
 
 ```ts
 import { scopeErrors } from "@blacklizard/inertia-express/core";

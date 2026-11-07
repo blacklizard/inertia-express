@@ -104,7 +104,7 @@ res.inertiaErrors({ name: "required", email: "invalid" }); // → errors.default
 res.inertiaErrors({ name: "required" }, "createUser");     // → errors.createUser
 ```
 
-The bags are shared as the `errors` prop on every page and remapped at read time: the `default` bag comes back flat, or as `errors[header]` when the request sends `X-Inertia-Error-Bag`; named bags come back keyed by name. See [Error bags](/core/redirects#error-bags).
+The bags are shared as the `errors` prop on every page and remapped at read time: the `default` bag comes back flat, or as `errors[header]` when the request sends `X-Inertia-Error-Bag`; named bags come back keyed by name only when no `default` bag is stored (otherwise only `default` is returned). See [Error bags](/core/redirects#error-bags).
 
 ---
 

@@ -323,7 +323,7 @@ The `errors` prop is shared on every page (`{}` when empty, listed in `sharedPro
 
 - Errors stored without a bag come back flat: `props.errors.email`.
 - If the request carries `X-Inertia-Error-Bag: signup`, those same errors come back as `props.errors.signup.email`.
-- Errors stored under a named bag (`res.inertiaErrors(errors, "createUser")`) come back keyed by name: `props.errors.createUser.email`.
+- Errors stored under a named bag (`res.inertiaErrors(errors, "createUser")`) come back keyed by name, `props.errors.createUser.email`, when no `default` bag is stored. If a `default` bag is stored as well, only `default` is returned (flat, or under the header name) and the named bags are dropped.
 
 An explicit `errors` key in your shared or page props wins over the shared one.
 
