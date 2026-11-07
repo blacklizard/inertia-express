@@ -1,7 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { InertiaRequestInfo } from "../../src/core/index.js";
 import { deepMerge, defer, merge } from "../../src/core/index.js";
-import { vi } from "vitest";
 import { buildPage } from "../../src/core/render.js";
 
 const baseRequest: InertiaRequestInfo = {

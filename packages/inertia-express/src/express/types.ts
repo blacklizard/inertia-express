@@ -179,12 +179,6 @@ export interface InertiaMiddlewareOptions {
  */
 export interface InertiaResponseOptions extends RenderOptions {
   /**
-   * Instruct the client to keep the current URL fragment (`#hash`) across
-   * this visit. Defaults to `false`.
-   */
-  preserveFragment?: boolean;
-
-  /**
    * Override the URL used in the page object. Defaults to `req.originalUrl`.
    */
   url?: string;

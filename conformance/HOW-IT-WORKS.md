@@ -83,7 +83,7 @@ Spec → browser → upstream server.js (229 routes, all protocol logic inline)
 ```
 
 There is no adapter seam. The routes don't call `inertia()`/`res.inertia()`,
-they don't use `defer()`/`merge()`/`lazy()`/`always()` — they build the page
+they don't use `defer()`/`merge()`/`optional()`/`always()` — they build the page
 object by hand. Plugging an adapter in cleanly would mean rewriting all 229
 route call sites, which would be a fork, not a conformance run.
 
@@ -132,8 +132,9 @@ file to see exactly what changed. Side-by-side:
 
 The arity shim (`() => fn(data.props)`) is the one concession: upstream routes
 author function props as `(props) => …`, a convention of the reference server,
-not of the protocol. Nothing is pre-tagged — an earlier version of this port
-wrapped every closure in `core.lazy()`, which masked a real adapter bug
+not of the protocol. Nothing is pre-wrapped — an earlier version of this port
+wrapped every closure in the 2.x `core.lazy()` helper (removed in 3.0), which
+masked a real adapter bug
 (bare closures were silently dropped) for the suite's whole life. The port
 now hands the engine exactly what a route handler would.
 
@@ -168,8 +169,8 @@ short enough to keep in your head.
 - **Partial-reload filtering** — `resolveProps` partial-include / exclude
   logic, including **dotted-path key matching** (`users.data` matches `users`)
 - **Prop evaluation** — bare-closure detection and evaluation (the same
-  pipeline that evaluates `lazy`/`optional`/`deferred`/`always` in real
-  adapter usage)
+  resolver pipeline that evaluates `optional`/`defer`/`always`/`merge`/`once`/
+  `scroll` descriptors in real adapter usage)
 - **Page-object assembly** — `createPage` normalization (history flags, optional
   field omission) is exercised indirectly through the same shape upstream
   produces
@@ -179,12 +180,14 @@ short enough to keep in your head.
 
 ### Not exercised by this run (covered elsewhere)
 
-- **`defer()`, `merge()`, `deepMerge()`, `optional()`, `always()`** — upstream
+- **`defer()`, `merge()`, `deepMerge()`, `optional()`, `always()`, `once()`,
+  `scroll()`** — upstream
   pre-computes `deferredProps`/`mergeProps`/`deepMergeProps`/`matchPropsOn`
   and `alwaysProps` in `server.js` itself, so the conformance suite never
-  drives the adapter's *wrapper* API. The wrappers' tagging + detection +
-  emission to the page object live in the adapter's own unit + e2e tests:
-  - `packages/inertia-express/tests/core/props.test.ts` (20 cases)
+  drives the adapter's descriptor API. Descriptor resolution + emission of
+  page metadata live in the adapter's own unit + e2e tests:
+  - `packages/inertia-express/tests/core/props.test.ts` and
+    `tests/core/props-resolver.test.ts` (ported from inertia-laravel)
   - `packages/inertia-express/tests/express/v3-protocol.e2e.test.ts`
     (the v3 protocol-conformance e2e suite, 24 cases)
 - **Express middleware glue** — `res.inertia()` / `res.inertiaLocation()` /
@@ -285,7 +288,7 @@ the conformance server imports the built core, so the adapter is now
 rebuilt as the first step of `run.sh`.
 
 A second bug surfaced later, when the port stopped pre-wrapping function
-props in `core.lazy()` and handed the engine bare closures instead: the
+props in the 2.x `core.lazy()` and handed the engine bare closures instead: the
 engine dropped them. 17 partial-reload specs and 1 precognition spec went red
 at once, all healed by teaching `resolveProps` to treat a bare function
 exactly like the reference server does. Lesson encoded in §3: the port must
@@ -314,11 +317,29 @@ vue3 / chromium, upstream pinned at release `v3.11.0` (commit `f312557`),
 2026-11-07, checkout pristine, swap marker present in output:
 
 ```
-1347 passed
+1346 passed
    0 failed
-   0 flaky
+   3 flaky    (passed on retry; see §8)
   19 skipped  (suite's own framework-conditional skips)
+   1 excluded (see "Known divergence" below)
 ```
+
+The flaky cases were `tests/head.spec.ts:72` and `:113` and
+`tests/optimistic.spec.ts:165`. The optimistic one fails the same way when the
+file is run alone against upstream's unmodified `helpers.js`, so it is timing in
+the suite, not the adapter.
+
+**Known divergence.** One upstream spec is excluded from this runner:
+`tests/nested-props.spec.ts` › "it preserves rescued child props when that
+child path is excluded from reload". The reference Node server
+(`tests/app/helpers.js`, `processPartialProps`) applies
+`X-Inertia-Partial-Except` one-directionally: `except: ['auth.notifications']`
+drops the whole top-level `auth` prop, and the spec asserts that outcome.
+inertia-laravel's `PropsResolver`, which this adapter ports, keeps `auth` and
+drops only `auth.notifications`. The adapter implements the Laravel behaviour,
+pinned by `tests/core/props-resolver.test.ts` ("nested prop is excluded via
+except header"). The exclusion is a `--grep-invert` on the Playwright launch
+line in `run.sh`; the upstream checkout is untouched.
 
 Read §4 before reading anything into "0 failed": the routes pre-compute every
 v3 page key, so this number says the adapter's request parsing, partial

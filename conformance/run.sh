@@ -75,4 +75,5 @@ fi
 echo "==> Running conformance suite ($PKG)"
 # NODE_OPTIONS flows playwright → pnpm serve → node server.js, where the
 # preload swaps helpers. In the runner/worker processes it is a harmless no-op.
-( cd "$INERTIA" && PACKAGE="$PKG" NODE_OPTIONS="--require $CONF/preload.cjs" node playwright.js --reporter=line --retries=2 )
+# Excluded: reference server applies partial-except one-directionally; we follow Laravel (HOW-IT-WORKS §9).
+( cd "$INERTIA" && PACKAGE="$PKG" NODE_OPTIONS="--require $CONF/preload.cjs" node playwright.js --reporter=line --retries=2 --grep-invert "preserves rescued child props when that child path is excluded from reload" )

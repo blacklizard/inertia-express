@@ -17,7 +17,7 @@ The internal core is framework-agnostic, so future adapters for Fastify, Hono, N
 - Full implementation of the Inertia.js v3 protocol
 - `res.inertia(component, props, options)` Express helper
 - Shared props (static or per-request)
-- Lazy, optional, deferred, always, merge, and deep-merge props
+- Optional, deferred (with rescue), always, merge, deep-merge, once, and infinite-scroll props
 - Partial reloads (`X-Inertia-Partial-Data` / `X-Inertia-Partial-Except`)
 - Asset version handling and automatic 409 + `X-Inertia-Location` on mismatch
 - Inertia-aware redirects (auto 303 after PUT/PATCH/DELETE)
@@ -126,40 +126,158 @@ inertia({
 });
 ```
 
-## Lazy, optional, deferred, always, and merge props
+## Prop helpers
+
+Every prop value is either a plain value, a bare closure (evaluated on each
+response that includes it, awaited if it returns a promise), or a descriptor
+built by one of the constructors below. Descriptors are chainable and mirror
+inertia-laravel's prop classes; the resolver is a port of its `PropsResolver`.
 
 ```ts
-import { lazy, optional, defer, always, merge, deepMerge } from "@blacklizard/inertia-express";
+import { always, deepMerge, defer, merge, once, optional, scroll } from "@blacklizard/inertia-express";
+```
 
-await res.inertia("Dashboard", {
-  // Always evaluated.
-  user: req.user,
+A bare closure replaces 2.x's `lazy()`:
 
-  // Evaluated on every visit, but the function form lets you defer the work.
-  recent: lazy(() => userService.recent()),
-
-  // Omitted on full visits; only sent if requested via partial reload.
-  heavy: optional(() => analytics.expensiveQuery()),
-
-  // Omitted on initial visit; the client automatically requests it via a
-  // follow-up partial reload after mount, grouped by `"dashboard"`.
-  stats: defer(() => dashboard.getStats(), "dashboard"),
-
-  // Included on every response, even partial reloads that filter it out.
-  flash: always(() => req.session.flash),
-
-  // Merge with the existing client-side prop on partial reloads instead of
-  // replacing it. Useful for paginated lists / infinite-scroll feeds. Pass a
-  // match-on field to dedupe array items instead of blindly appending.
-  notifications: merge(await db.notifications.page(req.query.page), "id"),
-
-  // Recursive deep-merge into the existing client-side prop.
-  filters: deepMerge({ sort: { field: "name" } }),
+```ts
+app.get("/dashboard", async (req, res) => {
+  await res.inertia("Dashboard", {
+    user: req.user,
+    recent: () => userService.recent(),
+  });
 });
 ```
 
-A client can send `X-Inertia-Reset: <key>` to have a merge / deep-merge prop
-replaced instead of merged on that visit.
+### `optional`
+
+Omitted from the first load; resolved only when a partial reload asks for it.
+
+```ts
+app.get("/reports", async (req, res) => {
+  await res.inertia("Reports", {
+    heavy: optional(() => analytics.expensiveQuery()),
+  });
+});
+```
+
+Laravel: `Inertia::optional()`
+
+### `defer`
+
+Omitted from the first load; the client fetches it in a follow-up request with
+the rest of its group (default `"default"`). `.rescue()` opts in to error
+rescue: if the producer throws, the prop is dropped from the response, its path
+is reported in `rescuedProps`, and the middleware's `onRescue` hook is called.
+
+```ts
+app.get("/dashboard", async (req, res) => {
+  await res.inertia("Dashboard", {
+    stats: defer(() => dashboard.getStats(), "dashboard"),
+    feed: defer(() => feedService.load()).rescue(),
+  });
+});
+```
+
+Laravel: `Inertia::defer()`
+
+### `always`
+
+Included on every response, even partial reloads that do not request it.
+Takes a plain value or a closure.
+
+```ts
+app.get("/inbox", async (req, res) => {
+  await res.inertia("Inbox", {
+    flash: always(() => req.session.flash),
+  });
+});
+```
+
+Laravel: `Inertia::always()`
+
+### `merge` / `deepMerge`
+
+`merge(value)` tells the client to append the prop to its existing value at the
+root; `deepMerge(value)` merges recursively. Chain `.append(path?, matchOn?)`
+or `.prepend(path?, matchOn?)` to target nested paths, and `.matchOn(path)` to
+dedupe items by a key instead of blindly appending. A path argument may be
+`true` (the root, the default), a dotted path string, a list of paths, or a
+`{ path: matchOnKey }` record. A client can send `X-Inertia-Reset: <key>` to
+have a merge prop replaced instead of merged on that visit.
+
+```ts
+app.get("/notifications", async (req, res) => {
+  await res.inertia("Notifications", {
+    notifications: merge(() => db.notifications.page(req.query.page)).matchOn("id"),
+    feed: merge(() => feedService.page(req.query.page)).append("data", "id").prepend("pinned"),
+    filters: deepMerge({ sort: { field: "name" } }),
+  });
+});
+```
+
+Laravel: `Inertia::merge()` / `Inertia::deepMerge()`
+
+### `once`
+
+Resolved once and cached by the client across visits; later visits skip the
+producer while the client still holds the value. `.as(key)` sets a custom cache
+key (shareable across pages), `.until(delay)` sets an expiry (a number of
+seconds, or a `Date`), and `.fresh()` forces re-resolution on this response.
+`optional`, `defer` and `merge` descriptors also accept `.once()`.
+
+```ts
+app.get("/settings", async (req, res) => {
+  await res.inertia("Settings", {
+    countries: once(() => geo.countries()).as("countries").until(3600),
+    plans: once(() => billing.plans()).until(new Date("2027-01-01")),
+    banner: once(() => cms.banner()).fresh(req.query.refresh === "1"),
+  });
+});
+```
+
+Laravel: `Inertia::once()`
+
+### `scroll`
+
+An infinite-scroll prop: merged at its `wrapper` key (default `"data"`) and
+emitted with pagination metadata. `metadata` is required — either an object
+`{ pageName, previousPage, nextPage, currentPage }` or a function deriving it
+from the resolved value. The merge direction follows the client's
+`X-Inertia-Infinite-Scroll-Merge-Intent` header (`prepend`, otherwise
+`append`). Chain `.defer(group?)` to load the first page in a follow-up
+request, and `.matchOn(path)` to dedupe.
+
+```ts
+app.get("/posts", async (req, res) => {
+  await res.inertia("Posts", {
+    posts: scroll(() => postService.paginate(req.query.page), {
+      metadata: (page) => ({ pageName: "page", previousPage: page.prev, nextPage: page.next, currentPage: page.current }),
+    }).matchOn("id"),
+    comments: scroll(() => commentService.page(1), { wrapper: "items", metadata: { pageName: "page", previousPage: null, nextPage: 2, currentPage: 1 } }).defer(),
+  });
+});
+```
+
+Laravel: `Inertia::scroll()`
+
+### Rescue hook and fragment preservation
+
+Pass `onRescue: (error, path, req) => …` to `inertia({ … })` to report errors
+from rescued deferred props (the default logs them). Pass
+`{ preserveFragment: true }` as the third argument to `res.inertia()` to have
+the client keep the current URL `#fragment` across that visit.
+
+### Migrating from 2.x
+
+| 2.x | 3.0 |
+|---|---|
+| `lazy(fn)` | `fn` (a bare closure) |
+| `merge(value, matchOn)` | `merge(value).matchOn(matchOn)` |
+| `deepMerge(value, matchOn)` | `deepMerge(value).matchOn(matchOn)` |
+| `defer(fn, group)` | unchanged |
+| `optional(fn)`, `always(fn)` | unchanged |
+| `resolveProps()` → `{ props, deferred, merge, deepMerge, matchOn }` | `{ props, metadata }` |
+| Types `MergeProp<T> = T & {...}` | descriptor types; the page `props` type is unchanged |
 
 ## Partial reloads
 
