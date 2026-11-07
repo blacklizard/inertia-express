@@ -383,15 +383,17 @@ export default class PropsResolver {
   }
 
   /**
-   * Determine if a once-prop has already been loaded by the client.
-   * Stub: Task 6 implements it.
+   * Determine if a once-prop has already been loaded by the client: it
+   * resolves once, is not forced fresh, and its key (or path) is listed in
+   * the client's except-once header.
    *
-   * @param _prop The descriptor being considered.
-   * @param _path Dot path of the prop.
+   * @param prop The descriptor being considered.
+   * @param path Dot path of the prop.
    */
-  // eslint-disable-next-line class-methods-use-this
-  private wasAlreadyLoadedByClient(_prop: PropDescriptor, _path: string): boolean {
-    return false;
+  private wasAlreadyLoadedByClient(prop: PropDescriptor, path: string): boolean {
+    return prop.resolvesOnce
+      && !prop.isFresh
+      && this.request.exceptOnceProps.includes(prop.onceKey ?? path);
   }
 
   /**
@@ -535,13 +537,23 @@ export default class PropsResolver {
   private collectScrollMetadata(_path: string, _prop: PropDescriptor): void {}
 
   /**
-   * Collect once-prop metadata. Stub: Task 6 implements it.
+   * Collect once-prop metadata under its custom key (or path), unless a
+   * partial request filters it out.
    *
-   * @param _path Dot path of the prop.
-   * @param _prop The once descriptor.
+   * @param path Dot path of the prop.
+   * @param prop The once descriptor.
    */
-  // eslint-disable-next-line class-methods-use-this
-  private collectOnceMetadata(_path: string, _prop: PropDescriptor): void {}
+  private collectOnceMetadata(path: string, prop: PropDescriptor): void {
+    if (!prop.resolvesOnce) {
+      return;
+    }
+
+    if (this.isPartial && !this.isIncludedInPartialMetadata(path)) {
+      return;
+    }
+
+    this.onceProps[prop.onceKey ?? path] = { prop: path, expiresAt: prop.expiresAt() };
+  }
 }
 
 /**

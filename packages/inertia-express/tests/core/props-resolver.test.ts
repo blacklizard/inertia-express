@@ -16,7 +16,7 @@
 import { describe, expect, it } from "vitest";
 import PropDescriptor from "../../src/core/prop-descriptor.js";
 import { resolveProps } from "../../src/core/props-resolver.js";
-import { always, defer, merge, optional } from "../../src/core/props.js";
+import { always, defer, merge, once, optional } from "../../src/core/props.js";
 import { makeRequest, partialRequest } from "./support/request.js";
 
 const COMPONENT = "TestComponent";
@@ -479,6 +479,21 @@ describe("merge metadata", () => {
     expect(r.metadata).toEqual({ mergeProps: ["p.data"] });
   });
 
+  it("deep wins over paths", async () => {
+    const r = await page({ p: merge({ data: [] }).append("data").deepMerge() });
+    expect(r.metadata).toEqual({ deepMergeProps: ["p"] });
+  });
+
+  it("matchOn is emitted with a root append", async () => {
+    const r = await page({ p: merge([]).matchOn("id") });
+    expect(r.metadata).toEqual({ mergeProps: ["p"], matchPropsOn: ["p.id"] });
+  });
+
+  it("reset applies on a full visit and only to the named key", async () => {
+    const r = await page({ a: merge([1]), b: merge([2]) }, makeRequest({ resetKeys: ["a"] }));
+    expect(r.metadata).toEqual({ mergeProps: ["b"] });
+  });
+
   it("nested defer with merge metadata is collected", async () => {
     const r = await page({ feed: { posts: defer(() => [{ id: 1 }]).merge() } });
     expect(r.metadata.deferredProps).toEqual({ default: ["feed.posts"] });
@@ -539,5 +554,127 @@ describe("merge metadata", () => {
     const r = await page({ users: merge({ data: [1] }).append("data") }, partial("users.data"));
     expect(r.props).toEqual({ users: { data: [1] } });
     expect(r.metadata.mergeProps).toBeUndefined();
+  });
+});
+
+describe("once props", () => {
+  const onceMeta = (prop: string) => ({ prop, expiresAt: null });
+
+  it("nested once prop is resolved on initial load", async () => {
+    const r = await page({ config: { locale: once(() => "en") } });
+    expect(r.props).toEqual({ config: { locale: "en" } });
+  });
+
+  it("closure returning once prop resolves with metadata", async () => {
+    const r = await page({ locale: () => once(() => "en") });
+    expect(r.props).toEqual({ locale: "en" });
+    expect(r.metadata.onceProps).toEqual({ locale: onceMeta("locale") });
+  });
+
+  it("nested once prop metadata is collected", async () => {
+    const r = await page({ config: { locale: once(() => "en") } });
+    expect(r.metadata.onceProps).toEqual({ "config.locale": onceMeta("config.locale") });
+  });
+
+  it("nested once prop with custom key metadata is collected", async () => {
+    const r = await page({ config: { locale: once(() => "en").as("app-locale") } });
+    expect(r.metadata.onceProps).toEqual({ "app-locale": onceMeta("config.locale") });
+  });
+
+  it("nested once prop is excluded when already loaded", async () => {
+    let resolved = false;
+    const r = await page(
+      {
+        config: {
+          locale: once(() => {
+            resolved = true;
+            return "en";
+          }),
+          timezone: "UTC",
+        },
+      },
+      makeRequest({ isInertia: true, exceptOnceProps: ["config.locale"] }),
+    );
+    expect(r.props).toEqual({ config: { timezone: "UTC" } });
+    expect(r.metadata.onceProps).toEqual({ "config.locale": onceMeta("config.locale") });
+    expect(resolved).toBe(false);
+  });
+
+  it("nested once metadata is collected on exact partial request", async () => {
+    const r = await page({ config: { locale: once(() => "en") } }, partial("config.locale"));
+    expect(r.props).toEqual({ config: { locale: "en" } });
+    expect(r.metadata.onceProps).toEqual({ "config.locale": onceMeta("config.locale") });
+  });
+
+  it("nested once metadata is collected when parent is requested", async () => {
+    const r = await page({ config: { locale: once(() => "en") } }, partial("config"));
+    expect(r.props).toEqual({ config: { locale: "en" } });
+    expect(r.metadata.onceProps).toEqual({ "config.locale": onceMeta("config.locale") });
+  });
+
+  it("once metadata is not collected for an unrequested path on a partial", async () => {
+    const r = await page({ config: { locale: once(() => "en") }, other: always(1) }, partial("other"));
+    expect(r.props).toEqual({ other: 1 });
+    expect(r.metadata.onceProps).toBeUndefined();
+  });
+
+  it("nested defer once prop suppresses deferred metadata when already loaded", async () => {
+    const r = await page({ feed: { posts: defer(() => []).once() } }, makeRequest({ exceptOnceProps: ["feed.posts"] }));
+    expect(r.metadata.deferredProps).toBeUndefined();
+    expect(r.metadata.onceProps).toEqual({ "feed.posts": onceMeta("feed.posts") });
+  });
+
+  it("nested defer once prop includes deferred metadata on first load", async () => {
+    const r = await page({ feed: { posts: defer(() => []).once() } });
+    expect(r.metadata.deferredProps).toEqual({ default: ["feed.posts"] });
+    expect(r.metadata.onceProps).toEqual({ "feed.posts": onceMeta("feed.posts") });
+  });
+
+  it("a fresh once prop resolves even when the client already has it", async () => {
+    const r = await page({ plans: once(() => ["a"]).fresh() }, makeRequest({ isInertia: true, exceptOnceProps: ["plans"] }));
+    expect(r.props).toEqual({ plans: ["a"] });
+    expect(r.metadata.onceProps).toEqual({ plans: onceMeta("plans") });
+  });
+
+  it("except-once is ignored on a non-Inertia request", async () => {
+    const r = await page({ plans: once(() => ["a"]) }, makeRequest({ exceptOnceProps: ["plans"] }));
+    expect(r.props).toEqual({ plans: ["a"] });
+  });
+
+  it("partial request for parent resolves all nested prop types", async () => {
+    const r = await page(
+      {
+        dashboard: {
+          stats: "visible",
+          feed: merge([{ id: 1 }]),
+          notifications: defer(() => ["msg"]),
+          settings: optional(() => ({ theme: "dark" })),
+          locale: once(() => "en"),
+        },
+      },
+      partial("dashboard"),
+    );
+    expect(r.props).toEqual({
+      dashboard: { stats: "visible", feed: [{ id: 1 }], notifications: ["msg"], settings: { theme: "dark" }, locale: "en" },
+    });
+    expect(r.metadata.mergeProps).toEqual(["dashboard.feed"]);
+    expect(r.metadata.onceProps).toEqual({ "dashboard.locale": onceMeta("dashboard.locale") });
+    expect(r.metadata.deferredProps).toBeUndefined();
+  });
+
+  it("multiple nested prop types are handled together", async () => {
+    const r = await page({
+      dashboard: {
+        stats: "visible",
+        feed: merge([{ id: 1 }]),
+        notifications: defer(() => []),
+        settings: optional(() => []),
+        locale: once(() => "en"),
+      },
+    });
+    expect(r.props).toEqual({ dashboard: { stats: "visible", feed: [{ id: 1 }], locale: "en" } });
+    expect(r.metadata.mergeProps).toEqual(["dashboard.feed"]);
+    expect(r.metadata.deferredProps).toEqual({ default: ["dashboard.notifications"] });
+    expect(r.metadata.onceProps).toEqual({ "dashboard.locale": onceMeta("dashboard.locale") });
   });
 });
