@@ -56,7 +56,7 @@ inertia({
     auth: { user: req.user ?? null },
     csrf: req.csrfToken?.(),
   }),
-  // Errors → `errors` prop, flash → top-level `flash` page key, both read-once.
+  // Session flash → top-level `flash` page key, read-once. `errors` is always shared.
   flashFromSession: true,
 });
 ```

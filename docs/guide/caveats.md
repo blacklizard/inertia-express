@@ -56,9 +56,15 @@ inertia({
 });
 ```
 
-### Errors need flashFromSession
+### Error bags remap at read time
 
-The `errors` shared prop is injected only when [`flashFromSession`](/core/middleware#flashfromsession) is on. Without it, no `errors` prop is added, `sharedProps` does not list it, and errors recorded with `res.inertiaErrors()` never reach the page. Either turn the option on or pass validation errors yourself through `sharedProps` or the page props.
+`res.inertiaErrors(errors, bag)` stores each bag as-is under `req.session.inertia.errors[bag]` (bag `default` when omitted); nothing is scoped at write time. The `errors` prop is built when the next page is rendered: errors stored without a bag come back flat, unless the request carries `X-Inertia-Error-Bag`, in which case they are nested under that name; named bags always come back keyed by name. This matches inertia-laravel's `Middleware::resolveValidationErrors`, so the client that asked for a bag gets it even though the handler never named one. Send `X-Inertia-Error-Bag` from the form (the `errorBag` visit option), or read `errors[bag]` when the handler passed a bag name. See [Error bags](/core/redirects#error-bags).
+
+```ts
+res.inertiaErrors({ email: "invalid" });
+// next visit with X-Inertia-Error-Bag: signup → props.errors = { signup: { email: "invalid" } }
+// next visit without the header           → props.errors = { email: "invalid" }
+```
 
 ### onRescue failures are swallowed
 
@@ -75,7 +81,7 @@ await res.inertia("Page", { a: { x: () => slowX() }, b: { y: () => slowY() } });
 
 ### Not yet ported
 
-Live props (`broadcastProps` and the `liveProps` page metadata) are planned, not in 3.0.0. Two of inertia-laravel's middleware rules are also planned, not in 3.0.0: answering a redirect whose target has a URL fragment with 409 and `X-Inertia-Redirect`, and turning an empty 200 response into a redirect back. Redirects after `PUT`, `PATCH` and `DELETE` are already promoted to 303.
+Live props (`broadcastProps` and the `liveProps` page metadata) are planned, not yet ported.
 
 ### Infinite scroll is not demoed
 

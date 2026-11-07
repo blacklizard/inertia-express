@@ -328,5 +328,5 @@ Other changes to check when upgrading:
 - Partial reloads follow dotted paths — see [Nested props and partial reloads](#nested-props-and-partial-reloads).
 - Types: `DeferredProp` is renamed to `DeferProp`. `LazyProp`, `DeepMergeProp` and `PropValue` are removed. `MergeProp<T>` is now the descriptor interface returned by `merge()` / `deepMerge()`, not `T & {...}`.
 - Core-entry adapter authors who build these objects by hand: `InertiaPage.preserveFragment` is now required, and `InertiaRequestInfo` gains the required fields `exceptOnceProps` and `mergeIntent`.
-- `sharedProps` (the list of shared top-level keys) is now emitted on every page that has shared props. With [`flashFromSession`](/core/middleware#flashfromsession) on, `errors` is shared on every page, so it is always listed there.
+- `sharedProps` (the list of shared top-level keys) is now emitted on every page that has shared props. `errors` is shared on every page, so it is always listed there.
 - Sibling props still resolve concurrently, as in 2.x, and the output key order and metadata order are deterministic (insertion order).

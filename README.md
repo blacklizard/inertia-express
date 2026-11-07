@@ -48,7 +48,7 @@ app.use(
     sharedProps: (req) => ({
       auth: { user: req.user ?? null },
     }),
-    // Auto-promote session flash + validation errors into page props.
+    // Surface session flash as the top-level `flash` page key (errors are always shared).
     flashFromSession: true,
   }),
 );

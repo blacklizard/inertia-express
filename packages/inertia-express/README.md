@@ -20,7 +20,7 @@ The internal core is framework-agnostic, so future adapters for Fastify, Hono, N
 - Optional, deferred (with rescue), always, merge, deep-merge, once, and infinite-scroll props
 - Partial reloads (`X-Inertia-Partial-Data` / `X-Inertia-Partial-Except`)
 - Asset version handling and automatic 409 + `X-Inertia-Location` on mismatch
-- Inertia-aware redirects (auto 303 after PUT/PATCH/DELETE)
+- Inertia-aware redirects (auto 303 after PUT/PATCH/DELETE/QUERY, 409 + `X-Inertia-Redirect` for `#fragment` targets, empty 200 → redirect back)
 - External redirects via `res.inertiaLocation()`
 - Validation error helpers
 - Pluggable root view
@@ -88,7 +88,7 @@ Pass options to `inertia({ ... })`:
 | `ssr`              | `SsrRenderer`                         | SSR hook returning `{ head, body }`. See [SSR](#server-side-rendering-ssr).  |
 | `cache`            | `InertiaCacheOptions`                 | View cache for SSR HTML. See [View cache](#view-cache).                      |
 | `edgeCache`        | `EdgeCachePolicy`                     | CDN `Cache-Control` policy. See [Edge caching](#edge-caching-cdn).           |
-| `flashFromSession` | `boolean`                             | Auto-promote `req.session.errors` / `flash` into shared props. Default off.  |
+| `flashFromSession` | `boolean`                             | Surface `req.session.flash` as the top-level `flash` page key. Default off.  |
 
 If no `rootView` is given, the middleware emits a minimal default HTML shell with an empty `<div id="app">` plus the v3 `<script type="application/json" data-page="app">` page tag, so you can wire up a Vite client manually.
 
@@ -121,10 +121,11 @@ inertia({
     auth: { user: req.user ?? null },
     csrf: req.csrfToken?.(),
     flash: req.session?.flash ?? {},
-    errors: req.session?.errors ?? {},
   }),
 });
 ```
+
+Validation errors do not need wiring here: `errors` is shared on every page automatically (see [Validation errors](#validation-errors)).
 
 ## Prop helpers
 
@@ -302,18 +303,10 @@ The middleware applies this filtering automatically. Partial reload filtering is
 
 ## Validation errors
 
-The simplest pattern is to share `req.session.errors` from `sharedProps`:
+Record validation errors with `res.inertiaErrors(errors, bag?)`. Errors are stored per bag (`default` when no bag is given); a repeated bag replaces the earlier one and other bags are kept.
 
-```ts
-inertia({
-  sharedProps: (req) => ({ errors: req.session?.errors ?? {} }),
-});
-```
-
-The middleware also exposes `res.inertiaErrors(errors, bag?)`, which:
-
-- Writes errors to `req.session.errors` if a session is present.
-- Otherwise stores them on `res.locals.inertiaErrors` for the same response.
+- With a session, it writes `req.session.inertia.errors[bag] = errors`; the next render reads them and clears them (read-once).
+- Without a session, it writes the same bags map to `res.locals.inertiaErrors` for the current response.
 
 ```ts
 app.post("/users", (req, res) => {
@@ -326,11 +319,22 @@ app.post("/users", (req, res) => {
 });
 ```
 
-You may pass an error bag name to namespace errors under `errors[bag]`.
+The `errors` prop is shared on every page (`{}` when empty, listed in `sharedProps`, kept on partial reloads) whether or not `flashFromSession` is on, so no `sharedProps` wiring is needed. Bags are remapped when the page is read, as in inertia-laravel's `Middleware::resolveValidationErrors`:
+
+- Errors stored without a bag come back flat: `props.errors.email`.
+- If the request carries `X-Inertia-Error-Bag: signup`, those same errors come back as `props.errors.signup.email`.
+- Errors stored under a named bag (`res.inertiaErrors(errors, "createUser")`) come back keyed by name: `props.errors.createUser.email`.
+
+An explicit `errors` key in your shared or page props wins over the shared one.
 
 ## Redirects
 
-For Inertia requests, `res.redirect(url)` after a `PUT`, `PATCH`, or `DELETE` is automatically promoted to status `303`. This is required by the Inertia protocol to ensure the follow-up request is a `GET`.
+For Inertia requests, a `302` from `res.redirect(url)` after a `PUT`, `PATCH`, `DELETE` or `QUERY` is automatically promoted to status `303`. This is required by the Inertia protocol to ensure the follow-up request is a `GET`.
+
+Two more inertia-laravel middleware rules apply to Inertia requests:
+
+- **Fragment redirects** (`Middleware::onRedirectWithFragment`) — a redirect whose URL contains `#` is answered with `409`, `X-Inertia-Redirect: <url>` (encoded like `Location`) and an empty body, so the client can navigate and keep the fragment. Prefetch requests get the normal redirect.
+- **Empty responses** (`Middleware::onEmptyResponse`) — a `200` with an empty body (`res.end()`, `res.send("")`) becomes a redirect back to the `Referer`, or `/` without one (`303` after PUT/PATCH/DELETE/QUERY, `302` otherwise). Responses whose headers were already sent (`res.flushHeaders()`, streaming) and handlers that never respond are not covered.
 
 For external redirects (different host or full reload), use `res.inertiaLocation()`:
 
@@ -342,7 +346,7 @@ For Inertia (XHR) visits this returns `409 X-Inertia-Location: <url>` which the 
 
 ## Asset versioning
 
-Pass a `version` resolver. When a client's `X-Inertia-Version` header doesn't match the current value on a `GET`, the middleware responds with `409` + `X-Inertia-Location: <same-url>`, and the Inertia client performs a full reload.
+Pass a `version` resolver. When a client's `X-Inertia-Version` header doesn't match the current value on a `GET`, the middleware responds with `409` + `X-Inertia-Location: <same-url>` and `X-Inertia-Version: <current version>` (inertia-laravel's `Middleware::onVersionChange`), and the Inertia client performs a full reload.
 
 ```ts
 inertia({
@@ -557,13 +561,13 @@ Failures on individual routes never halt the run — inspect `summary.results` t
 
 ## Flash from session
 
-Set `flashFromSession: true` to auto-promote `req.session.errors` and `req.session.flash` into shared props (and clear them after read), so you don't have to wire them into `sharedProps` manually:
+Set `flashFromSession: true` to surface `req.session.flash` as the top-level `flash` page key (a sibling of `props`, read on the client via `usePage().flash`) and clear it after read:
 
 ```ts
 inertia({ flashFromSession: true });
 ```
 
-Off by default — most apps already wire flash/errors via `sharedProps`. Requires a session middleware that exposes `req.session`.
+Off by default. Requires a session middleware that exposes `req.session`. The option gates only `flash`; validation errors are shared as the `errors` prop on every page regardless (see [Validation errors](#validation-errors)).
 
 ## Edge caching (CDN)
 

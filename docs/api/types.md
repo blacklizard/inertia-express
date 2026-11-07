@@ -43,6 +43,7 @@ interface InertiaRequestInfo {
   resetKeys: string[] | null;
   exceptOnceProps: string[];          // X-Inertia-Except-Once-Props; [] when absent
   mergeIntent: "append" | "prepend";  // X-Inertia-Infinite-Scroll-Merge-Intent; "prepend" only on that exact value
+  isPrefetch: boolean;                // true when Purpose, Sec-Purpose or X-Moz is "prefetch" (case-insensitive)
   method: string;
   url: string;
 }
@@ -238,7 +239,10 @@ const INERTIA_HEADERS = {
   location: "x-inertia-location",
   exceptOnceProps: "x-inertia-except-once-props",
   mergeIntent: "x-inertia-infinite-scroll-merge-intent",
+  redirect: "x-inertia-redirect",
 };
+
+const PREFETCH_HEADERS = ["purpose", "sec-purpose", "x-moz"]; // any one equal to "prefetch" marks a prefetch
 
 const INERTIA_REDIRECT_STATUS = 303;
 const INERTIA_LOCATION_STATUS = 409;

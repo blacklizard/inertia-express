@@ -6,7 +6,7 @@ Asset versioning tells the Inertia client when to do a full reload because its c
 
 1. The server reports the current asset version via `X-Inertia-Version` in every JSON response.
 2. The client tracks the version it loaded with.
-3. On a `GET` Inertia request, if the client's version doesn't match the server's, the middleware responds `409 + X-Inertia-Location: <same-url>`.
+3. On a `GET` Inertia request, if the client's version doesn't match the server's, the middleware responds `409 + X-Inertia-Location: <same-url>`, with `X-Inertia-Version` set to the server's current version (inertia-laravel's `Middleware::onVersionChange`).
 4. The Inertia client performs `window.location = url`, triggering a full reload that fetches fresh assets.
 
 ## Configuration

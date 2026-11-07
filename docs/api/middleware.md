@@ -22,7 +22,7 @@ interface InertiaMiddlewareOptions {
   ssr?: SsrRenderer;
   cache?: InertiaCacheOptions;
   edgeCache?: EdgeCachePolicy;
-  flashFromSession?: boolean;
+  flashFromSession?: boolean; // req.session.flash → top-level `flash` page key; `errors` is shared regardless
   onRescue?: (error: unknown, path: string, req: Request) => void;
 }
 
@@ -94,12 +94,17 @@ res.inertiaLocation("https://billing.example.com/checkout");
 
 ## `res.inertiaErrors(errors, bag?)`
 
-Stash validation errors for the next request.
+Stash validation errors for the next request. `bag` defaults to `"default"`.
+
+- **With a session:** writes `req.session.inertia.errors[bag] = errors`. A repeated bag replaces the earlier one; other bags are kept. The next render reads and clears them.
+- **Without a session:** writes the same bags map to `res.locals.inertiaErrors`.
 
 ```ts
-res.inertiaErrors({ name: "required", email: "invalid" });
-res.inertiaErrors({ name: "required" }, "createUser"); // with bag
+res.inertiaErrors({ name: "required", email: "invalid" }); // → errors.default
+res.inertiaErrors({ name: "required" }, "createUser");     // → errors.createUser
 ```
+
+The bags are shared as the `errors` prop on every page and remapped at read time: the `default` bag comes back flat, or as `errors[header]` when the request sends `X-Inertia-Error-Bag`; named bags come back keyed by name. See [Error bags](/core/redirects#error-bags).
 
 ---
 

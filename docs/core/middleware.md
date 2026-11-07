@@ -15,8 +15,11 @@ On every request it:
 1. Parses Inertia XHR headers into `req.inertia`
 2. Attaches `req.flash()` — a `connect-flash`-compatible flash API
 3. Attaches `res.inertia()`, `res.inertiaLocation()`, `res.inertiaErrors()`, `res.inertiaFlash()` to the response
-4. Promotes `PUT`/`PATCH`/`DELETE` redirects to `303` for Inertia requests
-5. Sets `Vary: Accept, X-Inertia` so CDNs don't mix HTML and JSON variants
+4. Promotes `PUT`/`PATCH`/`DELETE`/`QUERY` redirects to `303` for Inertia requests
+5. Answers an Inertia redirect to a URL with a `#` fragment with `409 + X-Inertia-Redirect` (not for prefetch requests) — see [Redirects with URL fragments](/core/redirects#redirects-with-url-fragments)
+6. Turns an empty `200` on an Inertia request into a redirect back to the `Referer` (or `/`) — see [Empty responses](/core/redirects#empty-responses)
+7. Shares validation errors as the `errors` prop on every page — see [`errors` is shared automatically](/core/redirects#errors-is-shared-automatically)
+8. Sets `Vary: Accept, X-Inertia` so CDNs don't mix HTML and JSON variants
 
 ## Options
 
@@ -47,7 +50,7 @@ type RootViewRenderer = (input: RootViewInput) => string | Promise<string>;
 
 ### `version`
 
-Asset version string. When a client sends a stale `X-Inertia-Version` header on a `GET`, the middleware responds `409 + X-Inertia-Location` to force a full reload.
+Asset version string. When a client sends a stale `X-Inertia-Version` header on a `GET`, the middleware responds `409 + X-Inertia-Location` to force a full reload, with `X-Inertia-Version` set to the server's current version (inertia-laravel's `Middleware::onVersionChange`).
 
 ```ts
 inertia({
@@ -74,7 +77,6 @@ inertia({
     auth: { user: req.user ?? null },
     csrf: req.csrfToken?.(),
     flash: req.session?.flash ?? {},
-    errors: req.session?.errors ?? {},
   }),
 });
 ```
@@ -129,7 +131,7 @@ CDN `Cache-Control` policy for non-Inertia responses. See [Edge Caching](/advanc
 
 ### `flashFromSession`
 
-When `true`, auto-promotes `req.session.errors` into the `errors` shared prop and `req.session.flash` into the **top-level `flash` page key** (a sibling of `props`, not a prop — matching inertia-laravel's `Response::resolveFlashData`), then clears both after read (read-once). Read it on the client with `usePage().flash`. Off by default — most apps wire flash/errors via `sharedProps`.
+When `true`, auto-promotes `req.session.flash` into the **top-level `flash` page key** (a sibling of `props`, not a prop — matching inertia-laravel's `Response::resolveFlashData`), then clears it after read (read-once). Read it on the client with `usePage().flash`. Off by default. It gates only `flash`: the `errors` prop is shared on every page whether this is on or off (see [`errors` is shared automatically](/core/redirects#errors-is-shared-automatically)).
 
 ```ts
 inertia({ flashFromSession: true });
