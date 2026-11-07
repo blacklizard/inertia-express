@@ -535,9 +535,9 @@ describe("merge metadata", () => {
     expect(r.metadata.deferredProps).toEqual({ default: ["dashboard.notifications"] });
   });
 
-  it("a merge prop requested by its child path keeps its metadata", async () => {
+  it("a merge prop requested only by its child path is included without merge metadata", async () => {
     const r = await page({ users: merge({ data: [1] }).append("data") }, partial("users.data"));
     expect(r.props).toEqual({ users: { data: [1] } });
-    expect(r.metadata.mergeProps).toEqual(["users.data"]);
+    expect(r.metadata.mergeProps).toBeUndefined();
   });
 });
