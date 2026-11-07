@@ -9,7 +9,7 @@
 # upstream checkout is changed. See conformance/HOW-IT-WORKS.md.
 #
 # Usage:  conformance/run.sh [vue3|react|svelte]
-# Env:    INERTIA_REF  upstream commit/branch to test against (default: pinned)
+# Env:    INERTIA_REF  upstream tag/commit/branch to test against (default: pinned release)
 set -euo pipefail
 
 PKG="${1:-vue3}"
@@ -17,24 +17,40 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONF="$ROOT/conformance"
 INERTIA="$CONF/inertia"
 
-# Pinned so every run tests the exact same upstream suite — reproducible CI.
-# Override with INERTIA_REF=master to test against the latest upstream.
-INERTIA_REF="${INERTIA_REF:-ca14edecf73ece19aa9737f2681b046e09b39279}"
+# Pinned to an upstream RELEASE so the conformance claim names the client
+# version users actually install. Tags are mutable, commits are not, so the
+# tag's commit is recorded too and asserted after fetch. Bump both together.
+# Override with INERTIA_REF=master (or any ref) to test against something else;
+# the sha assert is skipped for overrides.
+INERTIA_TAG="v3.11.0"
+INERTIA_TAG_SHA="f3125577a9e5a5a8bcdecffefc2e6577282f7868"
+INERTIA_REF="${INERTIA_REF:-$INERTIA_TAG}"
+EXPECT_SHA=""
+[ "$INERTIA_REF" = "$INERTIA_TAG" ] && EXPECT_SHA="$INERTIA_TAG_SHA"
 
 # 1. Build the adapter — the ported helpers import its core dist, so a stale
 #    build would silently test old code.
 echo "==> Building @blacklizard/inertia-express"
 ( cd "$ROOT" && pnpm --filter "@blacklizard/inertia-express" build )
 
-# 2. Fetch the upstream suite at the pinned ref (shallow, exact commit).
+# 2. Put the upstream checkout at the wanted ref (shallow, exact commit).
+#    Re-fetches whenever the checkout is not already at the pinned commit, so a
+#    pin bump takes effect without `rm -rf`; a non-pinned override always
+#    re-fetches because branches move.
 if [ ! -d "$INERTIA/.git" ]; then
-  echo "==> Fetching inertiajs/inertia @ $INERTIA_REF"
   rm -rf "$INERTIA"
   mkdir -p "$INERTIA"
   git -C "$INERTIA" init -q
   git -C "$INERTIA" remote add origin https://github.com/inertiajs/inertia.git
+fi
+if [ -z "$EXPECT_SHA" ] || [ "$(git -C "$INERTIA" rev-parse HEAD 2>/dev/null || true)" != "$EXPECT_SHA" ]; then
+  echo "==> Fetching inertiajs/inertia @ $INERTIA_REF"
   git -C "$INERTIA" fetch --depth 1 -q origin "$INERTIA_REF"
-  git -C "$INERTIA" checkout -q FETCH_HEAD
+  git -C "$INERTIA" checkout -q --force FETCH_HEAD
+fi
+if [ -n "$EXPECT_SHA" ] && [ "$(git -C "$INERTIA" rev-parse HEAD)" != "$EXPECT_SHA" ]; then
+  echo "!! $INERTIA_REF resolved to $(git -C "$INERTIA" rev-parse HEAD), expected $EXPECT_SHA — tag moved?" >&2
+  exit 1
 fi
 
 # 3. Install + build the upstream monorepo and the framework test-app.

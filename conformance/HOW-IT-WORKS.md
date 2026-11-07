@@ -3,7 +3,7 @@
 A trust-and-transparency walkthrough for anyone evaluating this adapter.
 
 If you only have 30 seconds: this repo runs the **official `inertiajs/inertia`
-Playwright test suite** — ~1150 browser tests authored by the Inertia.js
+Playwright test suite** — ~1350 browser tests authored by the Inertia.js
 maintainers — against `@blacklizard/inertia-express` in a real Chromium. The
 adapter is pinned, the upstream suite is pinned, and the runner is one command:
 `pnpm test:conformance`. The last result lives at the bottom of this doc.
@@ -61,7 +61,7 @@ The closest official conformance harness lives **inside `inertiajs/inertia`**:
 
 | Path                      | Size    | Purpose                                                  |
 | ------------------------- | ------- | -------------------------------------------------------- |
-| `tests/*.spec.ts`         | 53 files, ~1150 tests | Playwright specs driving a real browser     |
+| `tests/*.spec.ts`         | 64 files, ~1350 tests | Playwright specs driving a real browser     |
 | `tests/app/server.js`     | ~105 KB | Express server the specs run against                     |
 | `tests/app/helpers.js`    | ~200 LoC| Protocol transport used by `server.js`                   |
 | `playwright.config.ts`    |         | Boots the framework test-app + `server.js`, runs specs   |
@@ -161,7 +161,7 @@ This is the bit that matters most for trust. The transport port exercises
 some adapter code paths and not others. Both lists are non-empty; both are
 short enough to keep in your head.
 
-### Exercised against the real Inertia client across ~1150 browser tests
+### Exercised against the real Inertia client across ~1350 browser tests
 
 - **Request parsing** — `parseInertiaRequest` (headers, partial component,
   partial-data / partial-except, version, error-bag, reset, method, URL)
@@ -213,16 +213,19 @@ Three things are pinned:
    `@blacklizard/inertia-express` from the repo's current state before running
    (step 1 of `run.sh`). No risk of testing a stale `dist/`.
 2. **The upstream suite** — `conformance/run.sh` pins
-   `inertiajs/inertia` to a fixed commit SHA via the `INERTIA_REF` env var
-   (defaults to the SHA that produced the published result). Fetched as an
-   exact shallow SHA — `git fetch --depth 1 origin <sha>` — so no clone
-   walks a moving branch.
+   `inertiajs/inertia` to a **release tag** (`INERTIA_TAG`, the version of
+   `@inertiajs/*` users actually install) *and* records that tag's commit
+   (`INERTIA_TAG_SHA`). Tags can be moved; commits cannot. After the shallow
+   fetch the script asserts `HEAD` equals the recorded commit and refuses to
+   run otherwise. Bumping the pin means changing both lines together.
 3. **Root dependencies** — CI uses `pnpm install --frozen-lockfile`. The
    upstream monorepo install isn't frozen, but it's installed at a pinned
    SHA so its committed `pnpm-lock.yaml` is consistent.
 
-To test against the latest upstream instead of the pin:
-`INERTIA_REF=master pnpm test:conformance`.
+To test against something other than the pin:
+`INERTIA_REF=master pnpm test:conformance` (any tag, branch or commit works;
+the commit assert is skipped for overrides, and a non-pinned ref is always
+re-fetched because branches move).
 
 ---
 
@@ -307,14 +310,19 @@ conformance failures.
 
 ## 9. Last result
 
-vue3 / chromium, upstream pinned at `ca14edec`, 2026-11-07, checkout
-pristine, swap marker present in output:
+vue3 / chromium, upstream pinned at release `v3.11.0` (commit `f312557`),
+2026-11-07, checkout pristine, swap marker present in output:
 
 ```
-1185 passed
-   1 failed   (links.spec.ts:899 — known scroll-region flake; fails identically on upstream helpers)
-   3 flaky    (passed on retry)
-  18 skipped  (suite's own framework-conditional skips)
+1347 passed
+   0 failed
+   0 flaky
+  19 skipped  (suite's own framework-conditional skips)
 ```
+
+Read §4 before reading anything into "0 failed": the routes pre-compute every
+v3 page key, so this number says the adapter's request parsing, partial
+filtering and prop evaluation are wire-correct against client 3.11.0 — not
+that the adapter implements every 3.11.0 feature.
 
 Zero adapter conformance failures. CI runs this on every PR.
