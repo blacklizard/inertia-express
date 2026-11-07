@@ -153,10 +153,9 @@ export interface InertiaMiddlewareOptions {
   edgeCache?: EdgeCachePolicy;
 
   /**
-   * If true, merge session-stored validation errors and flash data into the
-   * shared props automatically, exposed as the `errors` and `flash` props.
-   * Both are read-once — cleared from the session after being read. Explicit
-   * `sharedProps` keys win on collision. Off by default.
+   * If true, surface session-stored flash data (`req.session.flash`) as the
+   * top-level `flash` page key, read-once. Gates only `flash`: the `errors`
+   * prop is shared on every page regardless of this option. Off by default.
    */
   flashFromSession?: boolean;
 
@@ -246,13 +245,17 @@ declare module 'express-serve-static-core' {
      */
     inertiaLocation: InertiaLocation;
     /**
-     * Share validation errors with the client. Helper around setting
-     * `req.session.errors`, but framework-agnostic (no session required).
+     * Store validation errors for the next page render, under `bag`
+     * (default `'default'`). With a session they are written to
+     * `req.session.inertia.errors[bag]`; without one, to the same bags map on
+     * `res.locals.inertiaErrors`. A repeated bag is replaced; distinct bags
+     * accumulate. They are shared as the `errors` prop, remapped at read time
+     * by the `X-Inertia-Error-Bag` header, and cleared from the session once read.
      */
     inertiaErrors: (errors: ValidationErrors, bag?: string) => void;
     /**
      * Stash flash data for the next request. Stored in `req.session.flash`
-     * and surfaced as the `flash` shared prop when `flashFromSession` is
+     * and surfaced as the top-level `flash` page key when `flashFromSession` is
      * enabled. Replaces any flash already queued for this redirect.
      * No-ops when no session is wired.
      */

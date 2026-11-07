@@ -1,4 +1,5 @@
 import {
+  always,
   buildPage,
   computeSsrCacheKey,
   encodePageScript,
@@ -7,6 +8,7 @@ import {
   isVersionMismatch,
   parseInertiaRequest,
   renderDefaultHtml,
+  resolveValidationErrors,
   resolveVersion,
 } from '../core';
 import { applyEdgeCache } from './edge-cache.js';
@@ -14,7 +16,7 @@ import { applyEdgeCache } from './edge-cache.js';
 import type { Request, Response } from 'express';
 
 import type {
-  InertiaPage, InertiaRequestInfo, PageProps, RescueHandler, SharedPropsInput, SsrCacheEntry,
+  InertiaPage, InertiaRequestInfo, PageProps, RescueHandler, SharedPropsInput, SsrCacheEntry, ValidationErrorBags,
 } from '../core';
 import type {
   InertiaCacheOptions, InertiaMiddlewareOptions, InertiaResponseOptions, SsrResult,
@@ -25,9 +27,12 @@ interface RenderContext {
 }
 
 /**
- * Resolve the shared-props input for a request. When `flashFromSession` is
- * enabled, session-stored validation errors are merged in as the `errors`
- * shared prop (read-once — cleared after being read). Flash data is handled
+ * Resolve the shared-props input for a request. Validation errors are always
+ * shared as the `errors` prop (inertia-laravel's `Middleware::share`): the
+ * per-bag map is read from `session.inertia.errors` (else
+ * `res.locals.inertiaErrors`), remapped for the `X-Inertia-Error-Bag` header
+ * and wrapped in `always()`. Session errors are read-once — cleared after
+ * being read. `flashFromSession` does not gate this. Flash data is handled
  * separately by {@link resolveFlashData} and surfaced as a top-level page key,
  * not a prop. Explicit `sharedProps` keys win on collision.
  *
@@ -38,10 +43,6 @@ interface RenderContext {
 function composeSharedProps(ctx: RenderContext, res: Response): SharedPropsInput<Request> {
   const base = ctx.options.sharedProps;
 
-  if (!ctx.options.flashFromSession) {
-    return base ?? {};
-  }
-
   return async (req: Request): Promise<PageProps> => {
     let baseProps: PageProps = {};
 
@@ -50,16 +51,15 @@ function composeSharedProps(ctx: RenderContext, res: Response): SharedPropsInput
     }
 
     const { session } = (req as unknown as { session?: Record<string, unknown> });
-    const errors = (session?.errors as PageProps | undefined)
-      ?? (res.locals.inertiaErrors as PageProps | undefined)
-      ?? {};
+    const inertiaState = session?.inertia as { errors?: ValidationErrorBags } | undefined;
+    const bags = inertiaState?.errors ?? (res.locals.inertiaErrors as ValidationErrorBags | undefined);
 
-    if (session) {
+    if (inertiaState) {
       // Validation errors are read-once: clear so they do not leak into later visits.
-      session.errors = undefined;
+      inertiaState.errors = undefined;
     }
 
-    return { errors, ...baseProps };
+    return { errors: always(resolveValidationErrors(bags, req.inertia?.errorBag ?? null)), ...baseProps };
   };
 }
 

@@ -4,13 +4,13 @@ import installEmptyResponseGuard from './empty-response.js';
 import installRedirectOverride from './redirect-override.js';
 import { sendInertiaLocation, sendInertiaResponse } from './response.js';
 import {
-  parseInertiaRequest, renderErrorPage, scopeErrors,
+  parseInertiaRequest, renderErrorPage,
 } from '../core/index.js';
 
 import type { NextFunction, Request, Response } from 'express';
 
 import type { InertiaMiddlewareOptions, InertiaResponseOptions } from './types.js';
-import type { PageProps, ValidationErrors } from '../core/index.js';
+import type { PageProps, ValidationErrorBags, ValidationErrors } from '../core/index.js';
 
 /**
  * Build the `connect-flash`-compatible `req.flash()` method for a request.
@@ -79,7 +79,9 @@ function createFlash(req: Request): Request['flash'] {
  *   - Adds `req.flash(type?, msg?)` — a `connect-flash`-compatible API.
  *   - Adds `res.inertia(component, props, options)`.
  *   - Adds `res.inertiaLocation(url)` for external redirects.
- *   - Adds `res.inertiaErrors(errors, bag?)` to flash validation errors.
+ *   - Adds `res.inertiaErrors(errors, bag?)` to store validation errors per bag
+ *     (under `req.session.inertia.errors`, else `res.locals.inertiaErrors`); they are
+ *     shared as the `errors` prop on every page, remapped by `X-Inertia-Error-Bag`.
  *   - Adds `res.inertiaFlash(data)` to flash arbitrary data.
  *   - Adds `res.inertiaError(status, message?)` to render an error page.
  *   - Auto-promotes redirects after PUT/PATCH/DELETE/QUERY to 303 for Inertia visits.
@@ -128,19 +130,20 @@ export function inertia(options: InertiaMiddlewareOptions = {}) {
       sendInertiaLocation(req, res, url);
     };
 
-    // res.inertiaErrors() — stash validation errors for the next request.
-    // No-ops gracefully when no session is configured.
-    res.inertiaErrors = (errors: ValidationErrors, bag?: string): void => {
+    // res.inertiaErrors() — stash validation errors for the next request,
+    // stored per bag (a repeated bag is replaced, distinct bags accumulate).
+    // Without a session they land on res.locals.inertiaErrors instead.
+    res.inertiaErrors = (errors: ValidationErrors, bag = 'default'): void => {
       const { session } = (req as unknown as { session?: Record<string, unknown> });
-      const scoped = scopeErrors(errors, bag ?? null);
 
       if (session) {
-        const existing = (session.errors as PageProps | undefined) ?? {};
-        session.errors = { ...existing, ...(scoped.errors as PageProps) };
+        const inertiaState = (session.inertia as { errors?: ValidationErrorBags } | undefined) ?? {};
+
+        session.inertia = { ...inertiaState, errors: { ...inertiaState.errors, [bag]: errors } };
       } else {
-        // Without a session, expose them on res.locals so a custom shared-prop
-        // resolver can pick them up for the same response.
-        res.locals.inertiaErrors = scoped.errors;
+        const existing = (res.locals.inertiaErrors as ValidationErrorBags | undefined) ?? {};
+
+        res.locals.inertiaErrors = { ...existing, [bag]: errors };
       }
     };
 

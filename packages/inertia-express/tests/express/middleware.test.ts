@@ -11,6 +11,17 @@ function buildApp(opts: Parameters<typeof inertia>[0] = {}) {
   return app;
 }
 
+function appWithSession(session: Record<string, unknown>, opts: Parameters<typeof inertia>[0]) {
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    (req as unknown as { session: Record<string, unknown> }).session = session;
+    next();
+  });
+  app.use(inertia(opts));
+  return app;
+}
+
 describe("inertia middleware", () => {
   it("redirects from QUERY requests are converted to 303", async () => {
     const app = buildApp();
@@ -151,7 +162,7 @@ describe("inertia middleware", () => {
       .set("x-inertia-partial-component", "X")
       .set("x-inertia-partial-data", "heavy");
     const body = JSON.parse(r.text);
-    expect(body.props).toEqual({ heavy: "ok" });
+    expect(body.props).toEqual({ errors: {}, heavy: "ok" });
   });
 
   it("excludes keys named in partial-except", async () => {
@@ -165,7 +176,7 @@ describe("inertia middleware", () => {
       .set("x-inertia-partial-component", "X")
       .set("x-inertia-partial-except", "b");
     const body = JSON.parse(r.text);
-    expect(body.props).toEqual({ a: 1, c: 3 });
+    expect(body.props).toEqual({ errors: {}, a: 1, c: 3 });
   });
 
   it("emits deferredProps key map on initial visits", async () => {
@@ -178,7 +189,7 @@ describe("inertia middleware", () => {
     });
     const r = await request(app).get("/").set("x-inertia", "true");
     const body = JSON.parse(r.text);
-    expect(body.props).toEqual({});
+    expect(body.props).toEqual({ errors: {} });
     expect(body.deferredProps).toEqual({ dash: ["stats", "users"] });
   });
 
@@ -193,7 +204,7 @@ describe("inertia middleware", () => {
       .set("x-inertia-partial-component", "X")
       .set("x-inertia-partial-except", "flash");
     const body = JSON.parse(r.text);
-    expect(body.props).toEqual({ flash: "msg", a: 1 });
+    expect(body.props).toEqual({ errors: {}, flash: "msg", a: 1 });
   });
 
   it("emits mergeProps for a merge() prop on partial reloads", async () => {
@@ -385,7 +396,7 @@ describe("inertia middleware", () => {
     });
     const r = await request(app).get("/");
     expect(r.status).toBe(200);
-    expect(seen).toEqual({ props: { fast: 1 }, deferred: { g: ["slow"] } });
+    expect(seen).toEqual({ props: { errors: {}, fast: 1 }, deferred: { g: ["slow"] } });
     expect(r.text).toContain('"deferredProps"');
   });
 
@@ -447,23 +458,59 @@ describe("inertia middleware", () => {
     });
   });
 
-  it("inertiaErrors writes to req.session.errors when a session exists", async () => {
-    const app = express();
-    let captured: Record<string, unknown> | undefined;
-    app.use((req, _res, next) => {
-      (req as unknown as { session: Record<string, unknown> }).session = {
-        errors: { existing: "keep me" },
-      };
-      next();
+  it("validation errors are registered as of default", async () => {
+    const app = buildApp();
+    app.get("/", (_req, res) => { void res.inertia("Home", {}); });
+    const body = JSON.parse((await request(app).get("/").set("x-inertia", "true")).text);
+    expect(body.props.errors).toEqual({});
+    expect(body.sharedProps).toContain("errors");
+  });
+
+  it("validation errors survive a partial reload (always semantics)", async () => {
+    const app = appWithSession({ inertia: { errors: { default: { name: "required" } } } }, {});
+    app.get("/", (_req, res) => { void res.inertia("Home", { a: 1 }); });
+    const r = await request(app).get("/").set("x-inertia", "true").set("x-inertia-partial-component", "Home").set("x-inertia-partial-data", "a");
+    expect(JSON.parse(r.text).props).toEqual({ a: 1, errors: { name: "required" } });
+  });
+
+  it("validation errors are scoped to error bag header", async () => {
+    const app = appWithSession({ inertia: { errors: { default: { name: "required" } } } }, {});
+    app.get("/", (_req, res) => { void res.inertia("Home", {}); });
+    const r = await request(app).get("/").set("x-inertia", "true").set("x-inertia-error-bag", "example");
+    expect(JSON.parse(r.text).props.errors).toEqual({ example: { name: "required" } });
+  });
+
+  it("default validation errors can be overwritten", async () => {
+    const app = appWithSession({ inertia: { errors: { default: { name: "required" } } } }, {});
+    app.get("/", (_req, res) => { void res.inertia("Home", { errors: "foo" }); });
+    expect(JSON.parse((await request(app).get("/").set("x-inertia", "true")).text).props.errors).toBe("foo");
+  });
+
+  it("inertiaErrors accumulates distinct bags and replaces a repeated bag", async () => {
+    const session: Record<string, unknown> = {};
+    const app = appWithSession(session, {});
+    app.post("/", (_req, res) => {
+      res.inertiaErrors({ a: "1" }, "first");
+      res.inertiaErrors({ b: "2" }, "second");
+      res.inertiaErrors({ a: "3" }, "first");
+      res.status(204).end();
     });
-    app.use(inertia());
-    app.post("/users", (req, res) => {
+    await request(app).post("/");
+    expect((session.inertia as { errors: unknown }).errors).toEqual({ first: { a: "3" }, second: { b: "2" } });
+  });
+
+  it("inertiaErrors stores bags under req.session.inertia.errors", async () => {
+    const session: Record<string, unknown> = { inertia: { errors: { other: { keep: "me" } } } };
+    const app = appWithSession(session, {});
+    app.post("/users", (_req, res) => {
       res.inertiaErrors({ name: "required" });
-      captured = (req as unknown as { session: Record<string, unknown> }).session.errors as Record<string, unknown>;
       res.status(204).end();
     });
     await request(app).post("/users");
-    expect(captured).toEqual({ existing: "keep me", name: "required" });
+    expect((session.inertia as { errors: unknown }).errors).toEqual({
+      other: { keep: "me" },
+      default: { name: "required" },
+    });
   });
 
   it("inertiaErrors falls back to res.locals when no session exists", async () => {
@@ -471,12 +518,12 @@ describe("inertia middleware", () => {
     let captured: unknown;
     app.use(inertia());
     app.post("/users", (_req, res) => {
-      res.inertiaErrors({ email: "invalid" }, "user");
+      res.inertiaErrors({ name: "required" });
       captured = res.locals.inertiaErrors;
       res.status(204).end();
     });
     await request(app).post("/users");
-    expect(captured).toEqual({ user: { email: "invalid" } });
+    expect(captured).toEqual({ default: { name: "required" } });
   });
 
   it("inertiaFlash writes flash to session for next request", async () => {
@@ -634,19 +681,8 @@ describe("res.inertiaError", () => {
 });
 
 describe("flashFromSession", () => {
-  function appWithSession(session: Record<string, unknown>, opts: Parameters<typeof inertia>[0]) {
-    const app = express();
-    app.use(express.json());
-    app.use((req, _res, next) => {
-      (req as unknown as { session: Record<string, unknown> }).session = session;
-      next();
-    });
-    app.use(inertia(opts));
-    return app;
-  }
-
   it("merges session errors into props and surfaces flash as a top-level page key", async () => {
-    const app = appWithSession({ errors: { name: "required" }, flash: "saved" }, { flashFromSession: true });
+    const app = appWithSession({ inertia: { errors: { default: { name: "required" } } }, flash: "saved" }, { flashFromSession: true });
     app.get("/", (_req, res) => void res.inertia("X", {}));
     const r = await request(app).get("/").set("x-inertia", "true");
     const body = JSON.parse(r.text);
@@ -657,11 +693,11 @@ describe("flashFromSession", () => {
   });
 
   it("clears session flash data after reading (read-once)", async () => {
-    const session: Record<string, unknown> = { errors: { e: 1 }, flash: "x" };
+    const session: Record<string, unknown> = { inertia: { errors: { default: { e: 1 } } }, flash: "x" };
     const app = appWithSession(session, { flashFromSession: true });
     app.get("/", (_req, res) => void res.inertia("X", {}));
     await request(app).get("/").set("x-inertia", "true");
-    expect(session.errors).toBeUndefined();
+    expect((session.inertia as { errors?: unknown }).errors).toBeUndefined();
     expect(session.flash).toBeUndefined();
   });
 
@@ -688,29 +724,23 @@ describe("flashFromSession", () => {
     expect("flash" in body).toBe(false);
   });
 
-  it("does not inject errors/flash when flashFromSession is off", async () => {
-    const app = appWithSession({ errors: { e: 1 }, flash: "x" }, {});
+  it("shares errors even when flashFromSession is off and still omits flash", async () => {
+    const app = appWithSession({ inertia: { errors: { default: { e: 1 } } }, flash: "x" }, {});
     app.get("/", (_req, res) => void res.inertia("X", { a: 1 }));
     const r = await request(app).get("/").set("x-inertia", "true");
-    expect(JSON.parse(r.text).props).toEqual({ a: 1 });
+    const body = JSON.parse(r.text);
+    expect(body.props).toEqual({ a: 1, errors: { e: 1 } });
+    expect("flash" in body).toBe(false);
   });
 
   it("picks up res.locals.inertiaErrors when no session errors exist", async () => {
     const app = appWithSession({}, { flashFromSession: true });
     app.get("/", (_req, res) => {
-      res.locals.inertiaErrors = { email: "invalid" };
+      res.locals.inertiaErrors = { default: { email: "invalid" } };
       void res.inertia("X", {});
     });
     const r = await request(app).get("/").set("x-inertia", "true");
     expect(JSON.parse(r.text).props.errors).toEqual({ email: "invalid" });
-  });
-
-  it("does not crash when session.errors is a non-object and passes it through as-is", async () => {
-    const app = appWithSession({ errors: "some error" }, { flashFromSession: true });
-    app.get("/", (_req, res) => void res.inertia("X", {}));
-    const r = await request(app).get("/").set("x-inertia", "true");
-    expect(r.status).toBe(200);
-    expect(JSON.parse(r.text).props.errors).toBe("some error");
   });
 
   it("inertiaFlash integrates with flashFromSession: flash appears then is cleared", async () => {

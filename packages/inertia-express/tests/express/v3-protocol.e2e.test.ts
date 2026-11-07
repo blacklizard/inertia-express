@@ -85,7 +85,7 @@ describe("v3 protocol conformance", () => {
         .set("x-inertia", "true")
         .set("x-inertia-partial-component", "X")
         .set("x-inertia-partial-data", "heavy");
-      expect(JSON.parse(partial.text).props).toEqual({ heavy: "h" });
+      expect(JSON.parse(partial.text).props).toEqual({ errors: {}, heavy: "h" });
     });
 
     it("deferred props are omitted initially and listed in deferredProps by group", async () => {
@@ -101,7 +101,7 @@ describe("v3 protocol conformance", () => {
       );
       const initial = await request(app).get("/").set("x-inertia", "true");
       const body = JSON.parse(initial.text);
-      expect(body.props).toEqual({});
+      expect(body.props).toEqual({ errors: {} });
       expect(body.deferredProps).toEqual({ dash: ["stats", "users"], feed: ["feed"] });
     });
 
@@ -124,7 +124,7 @@ describe("v3 protocol conformance", () => {
         .set("x-inertia", "true")
         .set("x-inertia-partial-component", "X")
         .set("x-inertia-partial-except", "flash");
-      expect(JSON.parse(r.text).props).toEqual({ flash: "msg", a: 1 });
+      expect(JSON.parse(r.text).props).toEqual({ errors: {}, flash: "msg", a: 1 });
     });
   });
 
@@ -137,7 +137,7 @@ describe("v3 protocol conformance", () => {
         .set("x-inertia", "true")
         .set("x-inertia-partial-component", "X")
         .set("x-inertia-partial-data", "a,c");
-      expect(JSON.parse(r.text).props).toEqual({ a: 1, c: 3 });
+      expect(JSON.parse(r.text).props).toEqual({ errors: {}, a: 1, c: 3 });
     });
 
     it("X-Inertia-Partial-Except drops the named keys", async () => {
@@ -148,7 +148,7 @@ describe("v3 protocol conformance", () => {
         .set("x-inertia", "true")
         .set("x-inertia-partial-component", "X")
         .set("x-inertia-partial-except", "b");
-      expect(JSON.parse(r.text).props).toEqual({ a: 1, c: 3 });
+      expect(JSON.parse(r.text).props).toEqual({ errors: {}, a: 1, c: 3 });
     });
 
     it("partial-except takes precedence over partial-data", async () => {
@@ -160,7 +160,7 @@ describe("v3 protocol conformance", () => {
         .set("x-inertia-partial-component", "X")
         .set("x-inertia-partial-data", "a,b")
         .set("x-inertia-partial-except", "b");
-      expect(JSON.parse(r.text).props).toEqual({ a: 1 });
+      expect(JSON.parse(r.text).props).toEqual({ errors: {}, a: 1 });
     });
 
     it("a partial reload for a different component is treated as a full visit", async () => {
@@ -171,7 +171,7 @@ describe("v3 protocol conformance", () => {
         .set("x-inertia", "true")
         .set("x-inertia-partial-component", "Other")
         .set("x-inertia-partial-data", "a");
-      expect(JSON.parse(r.text).props).toEqual({ a: 1, b: 2 });
+      expect(JSON.parse(r.text).props).toEqual({ errors: {}, a: 1, b: 2 });
     });
 
     it("a dotted partial-data key keeps the matching top-level prop", async () => {
@@ -182,7 +182,7 @@ describe("v3 protocol conformance", () => {
         .set("x-inertia", "true")
         .set("x-inertia-partial-component", "X")
         .set("x-inertia-partial-data", "users.data");
-      expect(JSON.parse(r.text).props).toEqual({ users: { data: [1] } });
+      expect(JSON.parse(r.text).props).toEqual({ errors: {}, users: { data: [1] } });
     });
 
     it("a dotted partial-except key drops the whole top-level prop", async () => {
@@ -193,7 +193,7 @@ describe("v3 protocol conformance", () => {
         .set("x-inertia", "true")
         .set("x-inertia-partial-component", "X")
         .set("x-inertia-partial-except", "users.data");
-      expect(JSON.parse(r.text).props).toEqual({ meta: 2 });
+      expect(JSON.parse(r.text).props).toEqual({ errors: {}, meta: 2 });
     });
   });
 
@@ -222,7 +222,7 @@ describe("v3 protocol conformance", () => {
       app.get("/", (_req, res) => void res.inertia("X", { plans: once(() => ["a"]), b: 1 }));
       const r = await request(app).get("/").set("x-inertia", "true").set("x-inertia-except-once-props", "plans");
       const body = JSON.parse(r.text);
-      expect(body.props).toEqual({ b: 1 });
+      expect(body.props).toEqual({ errors: {}, b: 1 });
       expect(body.onceProps).toEqual({ plans: { prop: "plans", expiresAt: null } });
     });
 
@@ -329,6 +329,26 @@ describe("v3 protocol conformance", () => {
       await request(app).post("/users");
       expect(captured).toEqual({ createUser: { email: "invalid" } });
     });
+
+    it("a redirect-after-POST round trip delivers errors scoped by X-Inertia-Error-Bag", async () => {
+      const session: Record<string, unknown> = {};
+      const app = express();
+      app.use((req, _res, next) => {
+        (req as unknown as { session: Record<string, unknown> }).session = session;
+        next();
+      });
+      app.use(inertia());
+      app.post("/form", (_req, res) => {
+        res.inertiaErrors({ email: "invalid" });
+        res.redirect("/form");
+      });
+      app.get("/form", (_req, res) => void res.inertia("Form", {}));
+      await request(app).post("/form").set("x-inertia", "true");
+      const first = await request(app).get("/form").set("x-inertia", "true").set("x-inertia-error-bag", "signup");
+      expect(JSON.parse(first.text).props.errors).toEqual({ signup: { email: "invalid" } });
+      const second = await request(app).get("/form").set("x-inertia", "true").set("x-inertia-error-bag", "signup");
+      expect(JSON.parse(second.text).props.errors).toEqual({});
+    });
   });
 
   describe("SSR", () => {
@@ -355,7 +375,7 @@ describe("v3 protocol conformance", () => {
       });
       app.get("/", (_req, res) => void res.inertia("Dash", { fast: 1, slow: defer(() => 9, "g") }));
       const r = await request(app).get("/");
-      expect(seen).toEqual({ props: { fast: 1 }, deferred: { g: ["slow"] } });
+      expect(seen).toEqual({ props: { errors: {}, fast: 1 }, deferred: { g: ["slow"] } });
       expect(r.text).toContain('"deferredProps"');
     });
   });
