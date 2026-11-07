@@ -1,363 +1,146 @@
-import type {
-  AlwaysProp,
-  DeepMergeProp,
-  DeferredProp,
-  InertiaRequestInfo,
-  LazyProp,
-  MergeProp,
-  OptionalProp,
-  PageProps,
-} from './types.js';
+import PropDescriptor from './prop-descriptor.js';
 
-const LAZY = '__inertia_lazy' as const;
-const OPTIONAL = '__inertia_optional' as const;
-const DEFERRED = '__inertia_deferred' as const;
-const ALWAYS = '__inertia_always' as const;
-const MERGE = '__inertia_merge' as const;
-const DEEP_MERGE = '__inertia_deep_merge' as const;
-const MATCH_ON = '__inertia_match_on' as const;
+import type { PropSource, ScrollOptions } from './prop-descriptor.js';
 
 /**
- * Attach the (non-enumerable) `MATCH_ON` symbol-key to a merge/deep-merge
- * prop value so `resolveProps` can emit the dotted `prop.field` paths.
- *
- * @param value Object being tagged (mutated in place).
- * @param matchOn Single field name or list; no-op when undefined.
+ * Prop omitted from the first load and resolved only when requested.
  */
-function tagMatchOn(value: object, matchOn: string | string[] | undefined): void {
-  if (matchOn === undefined) {
-    return;
+export type OptionalProp<T> = Pick<PropDescriptor<T>, 'once' | 'as' | 'until' | 'fresh'>;
+
+/**
+ * Prop resolved in a follow-up request after the first load.
+ */
+export type DeferProp<T> = Pick<PropDescriptor<T>, 'merge' | 'deepMerge' | 'append' | 'prepend' | 'matchOn' | 'once' | 'as' | 'until' | 'fresh' | 'rescue'>;
+
+/**
+ * Prop the client merges into its existing value.
+ */
+export type MergeProp<T> = Pick<PropDescriptor<T>, 'deepMerge' | 'append' | 'prepend' | 'matchOn' | 'once' | 'as' | 'until' | 'fresh'>;
+
+/**
+ * Prop included on every response, regardless of partial filtering.
+ */
+export type AlwaysProp<T> = Pick<PropDescriptor<T>, never>;
+
+/**
+ * Prop the client resolves once and caches across visits.
+ */
+export type OnceProp<T> = Pick<PropDescriptor<T>, 'as' | 'until' | 'fresh'>;
+
+/**
+ * Infinite-scroll prop carrying pagination metadata.
+ */
+export type ScrollProp<T> = Pick<PropDescriptor<T>, 'defer' | 'matchOn'>;
+
+/**
+ * Throw a `TypeError` unless `fn` is callable.
+ *
+ * @param name Constructor name, for the error message.
+ * @param fn Value that must be a function.
+ */
+function assertCallable(name: string, fn: unknown): void {
+  if (typeof fn !== 'function') {
+    throw new TypeError(`${name}() expects a function, received ${typeof fn}.`);
   }
-
-  const fields = Array.isArray(matchOn) ? matchOn : [matchOn];
-  Object.defineProperty(value, MATCH_ON, { value: fields, enumerable: false });
 }
 
 /**
- * Wrap a value-producing function as a "lazy" prop.
+ * An optional prop: omitted from the first load, resolved when requested.
  *
- * Lazy props are evaluated on every visit (full or partial) when included.
- * They are NOT skipped on the initial visit — use {@link optional} for that.
- *
- * @param fn Producer called (and awaited) when the prop is included.
- */
-export function lazy<T>(fn: () => T | Promise<T>): LazyProp<T> {
-  const wrapped = (async () => fn()) as LazyProp<T>;
-  Object.defineProperty(wrapped, LAZY, { value: true, enumerable: false });
-
-  return wrapped;
-}
-
-/**
- * Wrap a value-producing function as an "optional" prop.
- *
- * Optional props are omitted from the initial response and only included
- * when explicitly requested via `X-Inertia-Partial-Data`.
- *
- * @param fn Producer called (and awaited) on partial reloads that request the key.
+ * @param fn Producer called (and awaited) when the prop is requested.
  */
 export function optional<T>(fn: () => T | Promise<T>): OptionalProp<T> {
-  const wrapped = (async () => fn()) as OptionalProp<T>;
-  Object.defineProperty(wrapped, OPTIONAL, { value: true, enumerable: false });
+  assertCallable('optional', fn);
+  const prop = new PropDescriptor<T>('optional', fn);
+  prop.ignoreFirstLoad = true;
 
-  return wrapped;
+  return prop;
 }
 
 /**
- * Wrap a value-producing function as a "deferred" prop.
+ * A deferred prop: omitted from the first load and fetched by the client in
+ * a follow-up request with the rest of its group.
  *
- * Deferred props are omitted from the initial visit. The client receives
- * the list of deferred prop keys (grouped by `group`) in the page object
- * and triggers an automatic partial reload to fetch them.
- *
- * @param fn Producer called (and awaited) on the deferred follow-up reload.
- * @param group Load-group name; keys in the same group are fetched in one round-trip.
+ * @param fn Producer called (and awaited) on the follow-up request.
+ * @param group Load group; props sharing a group are fetched together.
  */
-export function defer<T>(fn: () => T | Promise<T>, group = 'default'): DeferredProp<T> {
-  const wrapped = (async () => fn()) as DeferredProp<T>;
-  Object.defineProperty(wrapped, DEFERRED, { value: true, enumerable: false });
-  Object.defineProperty(wrapped, 'group', { value: group, enumerable: false });
+export function defer<T>(fn: () => T | Promise<T>, group = 'default'): DeferProp<T> {
+  assertCallable('defer', fn);
+  const prop = new PropDescriptor<T>('defer', fn);
+  prop.ignoreFirstLoad = true;
 
-  return wrapped;
+  return prop.defer(group);
 }
 
 /**
- * Wrap a value-producing function as an "always" prop.
+ * An always prop: included on every response, even partial reloads that do
+ * not request it.
  *
- * Always props are included on every response — full visits and partial
- * reloads alike — regardless of `X-Inertia-Partial-Data` /
- * `X-Inertia-Partial-Except` filtering.
- *
- * @param fn Producer called (and awaited) on every visit.
+ * @param value Plain value or producer.
  */
-export function always<T>(fn: () => T | Promise<T>): AlwaysProp<T> {
-  const wrapped = (async () => fn()) as AlwaysProp<T>;
-  Object.defineProperty(wrapped, ALWAYS, { value: true, enumerable: false });
+export function always<T>(value: PropSource<T>): AlwaysProp<T> {
+  const prop = new PropDescriptor<T>('always', value);
+  prop.isAlways = true;
 
-  return wrapped;
+  return prop;
 }
 
 /**
- * Mark a value as a "merge" prop. The Inertia client will append the new
- * value to the existing prop (typically used for paginated arrays).
+ * A merge prop: the client appends it to its existing value at the root.
  *
- * Pass `matchOn` (a field name or list of field names) to have the client
- * dedupe array items on that field instead of blindly appending.
- *
- * @param value Object or array to tag (mutated in place via non-enumerable properties).
- * @param matchOn Optional field name(s) to dedupe on.
+ * @param value Plain value or producer.
  */
-export function merge<T extends object>(value: T, matchOn?: string | string[]): MergeProp<T> {
-  const tagged = value as MergeProp<T>;
-  Object.defineProperty(tagged, MERGE, { value: true, enumerable: false });
-  tagMatchOn(tagged, matchOn);
-
-  return tagged;
+export function merge<T>(value: PropSource<T>): MergeProp<T> {
+  return new PropDescriptor<T>('merge', value).merge();
 }
 
 /**
- * Mark a value as a "deep merge" prop. The Inertia client recursively merges
- * the new value into the existing prop rather than shallow-appending.
+ * A deep-merge prop: the client recursively merges it into its existing value.
  *
- * Pass `matchOn` (a field name or list of field names) to have the client
- * dedupe array items on that field.
- *
- * @param value Object or array to tag (mutated in place via non-enumerable properties).
- * @param matchOn Optional field name(s) to dedupe on.
+ * @param value Plain value or producer.
  */
-export function deepMerge<T extends object>(value: T, matchOn?: string | string[]): DeepMergeProp<T> {
-  const tagged = value as DeepMergeProp<T>;
-  Object.defineProperty(tagged, DEEP_MERGE, { value: true, enumerable: false });
-  tagMatchOn(tagged, matchOn);
-
-  return tagged;
+export function deepMerge<T>(value: PropSource<T>): MergeProp<T> {
+  return new PropDescriptor<T>('merge', value).deepMerge();
 }
 
 /**
- * Type guard: `true` when `v` is a {@link lazy} prop wrapper.
+ * A once prop: resolved once and cached by the client across visits.
  *
- * @param v Value to test.
+ * @param fn Producer called (and awaited) when the client lacks the value.
  */
-function isLazy(v: unknown): v is LazyProp {
-  return typeof v === 'function' && (v as { [LAZY]?: boolean })[LAZY] === true;
+export function once<T>(fn: () => T | Promise<T>): OnceProp<T> {
+  assertCallable('once', fn);
+
+  return new PropDescriptor<T>('once', fn).once();
 }
 
 /**
- * Type guard: `true` when `v` is an {@link optional} prop wrapper.
+ * An infinite-scroll prop: merged at its wrapper key and carrying
+ * pagination metadata.
  *
- * @param v Value to test.
+ * @param fn Producer called (and awaited) for each page.
+ * @param options Wrapper key (default `'data'`) and pagination metadata.
  */
-function isOptional(v: unknown): v is OptionalProp {
-  return typeof v === 'function' && (v as { [OPTIONAL]?: boolean })[OPTIONAL] === true;
-}
+export function scroll<T>(fn: () => T | Promise<T>, options: ScrollOptions<T>): ScrollProp<T> {
+  assertCallable('scroll', fn);
 
-/**
- * Type guard: `true` when `v` is a {@link defer} prop wrapper.
- *
- * @param v Value to test.
- */
-function isDeferred(v: unknown): v is DeferredProp {
-  return typeof v === 'function' && (v as { [DEFERRED]?: boolean })[DEFERRED] === true;
-}
-
-/**
- * Type guard: `true` when `v` is an {@link always} prop wrapper.
- *
- * @param v Value to test.
- */
-function isAlways(v: unknown): v is AlwaysProp {
-  return typeof v === 'function' && (v as { [ALWAYS]?: boolean })[ALWAYS] === true;
-}
-
-/**
- * Type guard: `true` when `v` is a {@link merge} prop wrapper.
- *
- * @param v Value to test.
- */
-function isMerge(v: unknown): v is MergeProp {
-  return v !== null && typeof v === 'object' && (v as { [MERGE]?: boolean })[MERGE] === true;
-}
-
-/**
- * Type guard: `true` when `v` is a {@link deepMerge} prop wrapper.
- *
- * @param v Value to test.
- */
-function isDeepMerge(v: unknown): v is DeepMergeProp {
-  return v !== null && typeof v === 'object' && (v as { [DEEP_MERGE]?: boolean })[DEEP_MERGE] === true;
-}
-
-/**
- * Match a prop key against a partial-reload key list. A pattern matches when
- * it equals the key, or when it is a dotted path into the key (`users.data`
- * matches the `users` prop). Mirrors the official adapter's partial filtering.
- *
- * @param patterns Key patterns from `X-Inertia-Partial-Data` / `-Partial-Except`.
- * @param key Prop key being tested.
- */
-function partialKeyMatches(patterns: string[], key: string): boolean {
-  return patterns.some((pattern) => pattern === key || pattern.startsWith(`${key}.`));
-}
-
-/**
- * Read the non-enumerable `MATCH_ON` field-list off a tagged merge value,
- * returning an empty array when absent.
- *
- * @param v Possibly-tagged merge / deep-merge prop value.
- */
-function readMatchOn(v: unknown): string[] {
-  if (v === null || typeof v !== 'object') {
-    return [];
+  if (options?.metadata === undefined || options.metadata === null) {
+    throw new TypeError('scroll() requires options.metadata.');
   }
 
-  const fields = (v as { [MATCH_ON]?: string[] })[MATCH_ON];
+  const prop = new PropDescriptor<T>('scroll', fn).merge();
+  prop.isScroll = true;
+  prop.wrapper = options.wrapper ?? 'data';
+  prop.scrollMetadata = options.metadata;
 
-  return Array.isArray(fields) ? fields : [];
+  return prop;
 }
 
 /**
- * Inputs to {@link resolveProps}.
- */
-export interface ResolvePropsInput {
-  /** Props passed to `res.inertia(component, props)`. */
-  props: PageProps;
-  /** Globally shared props after evaluation. */
-  shared: PageProps;
-  /** The component name being rendered. */
-  component: string;
-  /** Parsed Inertia request info. */
-  request: InertiaRequestInfo;
-}
-
-/**
- * Result of {@link resolveProps}: the evaluated props plus the per-key
- * metadata the caller needs to populate the page object.
- */
-export interface ResolvePropsResult {
-  props: PageProps;
-  /** Deferred prop key map by group, for the initial visit. */
-  deferred: Record<string, string[]>;
-  /** Shallow-merge prop key list. */
-  merge: string[];
-  /** Deep-merge prop key list. */
-  deepMerge: string[];
-  /** Dotted `prop.field` match-on paths for merge/deep-merge props. */
-  matchOn: string[];
-}
-
-/**
- * Combine shared + page props, then apply partial-reload filtering and
- * lazy/optional/deferred evaluation per the Inertia v3 protocol.
+ * Type guard: `true` when `value` is a {@link PropDescriptor}.
  *
- * Resolution order matches the official adapters:
- * 1. Merge shared and page props (page wins on collision).
- * 2. Determine if this is a partial reload for the same component.
- * 3. For non-partial visits: drop optional and deferred props; keep everything
- *    else (lazy props are evaluated).
- * 4. For partial visits: keep only keys in `partialOnly` (if set), then drop
- *    keys in `partialExcept`. Optional props are now eligible.
- * 5. Evaluate every remaining function-shaped prop
- *    (lazy/optional/deferred/always) by calling it and awaiting the result.
- *    Independent props are evaluated in parallel via `Promise.all`.
- * 6. Collect merge / deep-merge / match-on keys, excluding any key the client
- *    listed in `X-Inertia-Reset` — those props are reset (replaced) rather
- *    than appended.
- *
- * @param input Page + shared props, the component name, and parsed request info.
+ * @param value Value to test.
  */
-export async function resolveProps(input: ResolvePropsInput): Promise<ResolvePropsResult> {
-  const {
-    props, shared, component, request,
-  } = input;
-
-  const combined: PageProps = { ...shared, ...props };
-
-  const isPartial = request.isInertia && request.partialComponent !== null && request.partialComponent === component;
-
-  const deferred: Record<string, string[]> = {};
-  const mergeKeys: string[] = [];
-  const deepMergeKeys: string[] = [];
-  const matchOnKeys: string[] = [];
-  const filtered: PageProps = {};
-
-  const isExcludedFromPartial = (key: string, value: unknown): boolean => {
-    if (!isPartial || isAlways(value)) {
-      return false;
-    }
-
-    if (request.partialOnly !== null && !partialKeyMatches(request.partialOnly, key)) {
-      return true;
-    }
-
-    return request.partialExcept !== null && partialKeyMatches(request.partialExcept, key);
-  };
-
-  Object.entries(combined).forEach(([key, value]) => {
-    // Track deferred prop keys for the page object (only on initial visits).
-    // On a partial reload that requests the key, it is evaluated like a lazy prop.
-    if (isDeferred(value) && !isPartial) {
-      (deferred[value.group] ??= []).push(key);
-
-      return;
-    }
-
-    // Optional props never appear on full visits.
-    if (isOptional(value) && !isPartial) {
-      return;
-    }
-
-    if (isExcludedFromPartial(key, value)) {
-      return;
-    }
-
-    filtered[key] = value;
-  });
-
-  const { resetKeys } = request;
-  const evaluated: PageProps = {};
-
-  // Evaluate every function-shaped prop; independent props resolve in parallel.
-  // ANY function is a closure prop — tagged (lazy/optional/defer/always) or
-  // bare. The reference server and inertia-laravel both resolve untagged
-  // closures; gating on tags silently dropped bare closures from the payload.
-  const resolvedEntries = await Promise.all(
-    Object.entries(filtered).map(async ([key, value]): Promise<readonly [string, unknown]> => {
-      const resolved: unknown = typeof value === 'function' ? await (value as () => unknown)() : value;
-
-      return [key, resolved] as const;
-    }),
-  );
-
-  resolvedEntries.forEach(([key, resolved]) => {
-    evaluated[key] = resolved;
-
-    const isReset = resetKeys?.includes(key) ?? false;
-
-    if (isReset) {
-      return;
-    }
-
-    const merging = isMerge(resolved);
-    const deepMerging = isDeepMerge(resolved);
-
-    if (merging) {
-      mergeKeys.push(key);
-    } else if (deepMerging) {
-      deepMergeKeys.push(key);
-    }
-
-    if (merging || deepMerging) {
-      readMatchOn(resolved).forEach((field) => {
-        matchOnKeys.push(`${key}.${field}`);
-      });
-    }
-  });
-
-  return {
-    props: evaluated,
-    deferred,
-    merge: mergeKeys,
-    deepMerge: deepMergeKeys,
-    matchOn: matchOnKeys,
-  };
+export function isPropDescriptor(value: unknown): value is PropDescriptor {
+  return value instanceof PropDescriptor;
 }
