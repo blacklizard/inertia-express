@@ -169,6 +169,11 @@ export interface InertiaRequestInfo {
    * `'prepend'` only on that exact value, otherwise `'append'`.
    */
   mergeIntent: 'append' | 'prepend';
+  /**
+   * True when `Purpose`, `Sec-Purpose` or `X-Moz` equals `prefetch`
+   * (case-insensitive).
+   */
+  isPrefetch: boolean;
   method: string;
   url: string;
 }

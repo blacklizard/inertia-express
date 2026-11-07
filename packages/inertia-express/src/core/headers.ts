@@ -18,7 +18,15 @@ export const INERTIA_HEADERS = {
   location: 'x-inertia-location',
   exceptOnceProps: 'x-inertia-except-once-props',
   mergeIntent: 'x-inertia-infinite-scroll-merge-intent',
+  redirect: 'x-inertia-redirect',
 } as const;
+
+/**
+ * Headers browsers set on speculative (prefetch) requests. A request is a
+ * prefetch when any of them equals `prefetch` (case-insensitive). Mirrors
+ * Laravel's `Request::prefetch()`.
+ */
+export const PREFETCH_HEADERS = ['purpose', 'sec-purpose', 'x-moz'] as const;
 
 type HeaderRecord = Record<string, string | string[] | undefined>;
 
@@ -91,6 +99,7 @@ export function parseInertiaRequest(input: { headers: HeaderRecord; method: stri
     resetKeys,
     exceptOnceProps,
     mergeIntent,
+    isPrefetch: PREFETCH_HEADERS.some((name) => readHeader(headers, name)?.toLowerCase() === 'prefetch'),
     method: input.method.toUpperCase(),
     url: input.url,
   };

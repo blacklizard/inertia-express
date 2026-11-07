@@ -13,6 +13,7 @@ const baseRequest: InertiaRequestInfo = {
   resetKeys: null,
   exceptOnceProps: [],
   mergeIntent: "append",
+  isPrefetch: false,
   method: "GET",
   url: "/x",
 };

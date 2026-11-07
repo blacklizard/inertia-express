@@ -16,6 +16,7 @@ export function makeRequest(overrides: Partial<InertiaRequestInfo> = {}): Inerti
     resetKeys: null,
     exceptOnceProps: [],
     mergeIntent: "append",
+    isPrefetch: false,
     method: "GET",
     url: "/",
     ...overrides,
@@ -46,5 +47,6 @@ export function partialRequest(
     resetKeys: opts.reset ?? null,
     exceptOnceProps: opts.exceptOnce ?? [],
     mergeIntent: opts.mergeIntent ?? "append",
+    isPrefetch: false,
   });
 }

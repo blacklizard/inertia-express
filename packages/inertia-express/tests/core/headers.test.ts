@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INERTIA_HEADERS, parseInertiaRequest } from "../../src/core/headers.js";
+import { INERTIA_HEADERS, PREFETCH_HEADERS, parseInertiaRequest } from "../../src/core/headers.js";
 
 describe("parseInertiaRequest", () => {
   it("detects Inertia requests via x-inertia: true", () => {
@@ -128,5 +128,19 @@ describe("once and infinite-scroll headers", () => {
   it("exposes the new header names", () => {
     expect(INERTIA_HEADERS.exceptOnceProps).toBe("x-inertia-except-once-props");
     expect(INERTIA_HEADERS.mergeIntent).toBe("x-inertia-infinite-scroll-merge-intent");
+  });
+
+  it("flags prefetch visits from Purpose, Sec-Purpose or X-Moz", () => {
+    for (const name of ["purpose", "sec-purpose", "x-moz"]) {
+      const info = parseInertiaRequest({ headers: { "x-inertia": "true", [name]: "Prefetch" }, method: "GET", url: "/" });
+      expect(info.isPrefetch).toBe(true);
+    }
+    expect(parseInertiaRequest({ headers: { "x-inertia": "true" }, method: "GET", url: "/" }).isPrefetch).toBe(false);
+    expect(parseInertiaRequest({ headers: { purpose: "prerender" }, method: "GET", url: "/" }).isPrefetch).toBe(false);
+  });
+
+  it("exposes the redirect header name", () => {
+    expect(INERTIA_HEADERS.redirect).toBe("x-inertia-redirect");
+    expect(PREFETCH_HEADERS).toEqual(["purpose", "sec-purpose", "x-moz"]);
   });
 });

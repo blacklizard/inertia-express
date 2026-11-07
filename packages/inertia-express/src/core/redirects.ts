@@ -13,7 +13,7 @@ export const INERTIA_LOCATION_STATUS = 409;
 
 /**
  * Decide which status code to use for a redirect produced by an Inertia
- * request. After a non-GET/HEAD form submission the response must be 303
+ * request. After a non-GET/HEAD form submission (PUT, PATCH, DELETE or QUERY) the response must be 303
  * so the client's follow-up request becomes a GET.
  *
  * @param method HTTP method of the inbound request (case-insensitive).
@@ -22,7 +22,7 @@ export const INERTIA_LOCATION_STATUS = 409;
 export function inertiaRedirectStatus(method: string, fallback = 302): number {
   const m = method.toUpperCase();
 
-  if (m === 'PUT' || m === 'PATCH' || m === 'DELETE') {
+  if (m === 'PUT' || m === 'PATCH' || m === 'DELETE' || m === 'QUERY') {
     return INERTIA_REDIRECT_STATUS;
   }
 
