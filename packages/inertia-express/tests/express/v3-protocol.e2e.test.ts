@@ -8,6 +8,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { always, deepMerge, defer, inertia, merge, once, optional } from "../../src/express/index.js";
+import { queryRequest } from "./support/query-request.js";
 
 function buildApp(opts: Parameters<typeof inertia>[0] = {}) {
   const app = express();
@@ -258,6 +259,22 @@ describe("v3 protocol conformance", () => {
   });
 
   describe("redirects", () => {
+    it("answers a fragment redirect with 409 + X-Inertia-Redirect on Inertia visits", async () => {
+      const app = buildApp();
+      app.get("/action", (_req, res) => res.redirect("/article#section"));
+      const r = await request(app).get("/action").set("x-inertia", "true");
+      expect(r.status).toBe(409);
+      expect(r.headers["x-inertia-redirect"]).toBe("/article#section");
+      expect(r.text).toBe("");
+    });
+
+    it("promotes a redirect to 303 after QUERY", async () => {
+      const app = buildApp();
+      app.all("/", (_req, res) => res.redirect("/foo"));
+      const r = await queryRequest(app, "/", { "x-inertia": "true" });
+      expect(r.status).toBe(303);
+      expect(r.headers.location).toBe("/foo");
+    });
     it("promotes a redirect to 303 after PUT/PATCH/DELETE on Inertia visits", async () => {
       const app = buildApp();
       app.put("/users/1", (_req, res) => res.redirect("/users"));

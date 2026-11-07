@@ -1,8 +1,9 @@
 import { format } from 'node:util';
 
+import installRedirectOverride from './redirect-override.js';
 import { sendInertiaLocation, sendInertiaResponse } from './response.js';
 import {
-  inertiaRedirectStatus, parseInertiaRequest, renderErrorPage, scopeErrors,
+  parseInertiaRequest, renderErrorPage, scopeErrors,
 } from '../core/index.js';
 
 import type { NextFunction, Request, Response } from 'express';
@@ -80,7 +81,9 @@ function createFlash(req: Request): Request['flash'] {
  *   - Adds `res.inertiaErrors(errors, bag?)` to flash validation errors.
  *   - Adds `res.inertiaFlash(data)` to flash arbitrary data.
  *   - Adds `res.inertiaError(status, message?)` to render an error page.
- *   - Auto-promotes redirects after PUT/PATCH/DELETE to 303 for Inertia visits.
+ *   - Auto-promotes redirects after PUT/PATCH/DELETE/QUERY to 303 for Inertia visits.
+ *   - Answers redirects to a URL with a `#` fragment with 409 + `X-Inertia-Redirect`
+ *     on Inertia visits (not prefetches) so the client can navigate itself.
  *
  * Mount before your route handlers:
  *
@@ -171,31 +174,10 @@ export function inertia(options: InertiaMiddlewareOptions = {}) {
       }
     };
 
-    // Promote redirects after PUT/PATCH/DELETE to 303 so the follow-up GET
-    // is correctly issued by every browser.
+    // Promote redirects after PUT/PATCH/DELETE/QUERY to 303 and answer
+    // fragment redirects with 409 + X-Inertia-Redirect.
     if (info.isInertia) {
-      const originalRedirect = res.redirect.bind(res);
-      // Express's `res.redirect` signature is either (url) or (status, url) —
-      // handle both. The deprecated (url, status) form was removed in v5.
-      res.redirect = ((arg1: number | string, arg2?: string | number) => {
-        let status: number;
-        let url: string;
-
-        if (typeof arg1 === 'number') {
-          status = arg1;
-          url = String(arg2);
-        } else {
-          status = inertiaRedirectStatus(req.method, 302);
-          url = arg1;
-        }
-
-        // If the user explicitly passed a 302 from a non-GET, bump to 303.
-        if (status === 302 && (req.method === 'PUT' || req.method === 'PATCH' || req.method === 'DELETE')) {
-          status = 303;
-        }
-
-        originalRedirect(status, url);
-      });
+      installRedirectOverride(req, res);
     }
 
     // Make sure CDNs / shared caches don't mix Inertia JSON and HTML variants.

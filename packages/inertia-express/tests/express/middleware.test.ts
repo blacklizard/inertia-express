@@ -2,6 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { always, deepMerge, defer, inertia, merge, optional, scroll } from "../../src/express/index.js";
+import { queryRequest } from "./support/query-request.js";
 
 function buildApp(opts: Parameters<typeof inertia>[0] = {}) {
   const app = express();
@@ -11,6 +12,61 @@ function buildApp(opts: Parameters<typeof inertia>[0] = {}) {
 }
 
 describe("inertia middleware", () => {
+  it("redirects from QUERY requests are converted to 303", async () => {
+    const app = buildApp();
+    app.all("/", (_req, res) => res.redirect("/foo"));
+    const r = await queryRequest(app, "/", { "x-inertia": "true" });
+    expect(r.status).toBe(303);
+    expect(r.headers.location).toBe("/foo");
+  });
+
+  it("redirect with hash fragment returns 409 for inertia requests", async () => {
+    const app = buildApp();
+    app.get("/action", (_req, res) => res.redirect("/article#section"));
+    const r = await request(app).get("/action").set("x-inertia", "true");
+    expect(r.status).toBe(409);
+    expect(r.headers["x-inertia-redirect"]).toBe("/article#section");
+    expect(r.text).toBe("");
+  });
+
+  it("post redirect with hash fragment returns 409 for inertia requests", async () => {
+    const app = buildApp();
+    app.post("/action", (_req, res) => res.redirect(303, "/article#section"));
+    const r = await request(app).post("/action").set("x-inertia", "true");
+    expect(r.status).toBe(409);
+    expect(r.headers["x-inertia-redirect"]).toBe("/article#section");
+  });
+
+  it("redirect without hash fragment is not intercepted", async () => {
+    const app = buildApp();
+    app.post("/action", (_req, res) => res.redirect("/article"));
+    const r = await request(app).post("/action").set("x-inertia", "true");
+    expect(r.status).toBe(302);
+    expect(r.headers.location).toBe("/article");
+  });
+
+  it("redirect with hash fragment is not intercepted for non-inertia requests", async () => {
+    const app = buildApp();
+    app.get("/action", (_req, res) => res.redirect("/article#section"));
+    const r = await request(app).get("/action");
+    expect(r.status).toBe(302);
+    expect(r.headers.location).toBe("/article#section");
+  });
+
+  it("redirect with hash fragment is not intercepted for prefetch requests", async () => {
+    const app = buildApp();
+    app.get("/action", (_req, res) => res.redirect("/article#section"));
+    const r = await request(app).get("/action").set("x-inertia", "true").set("purpose", "prefetch");
+    expect(r.status).toBe(302);
+    expect(r.headers.location).toBe("/article#section");
+  });
+
+  it("an encoded %23 in the redirect URL is not a fragment", async () => {
+    const app = buildApp();
+    app.get("/action", (_req, res) => res.redirect("/search?q=a%23b"));
+    const r = await request(app).get("/action").set("x-inertia", "true");
+    expect(r.status).toBe(302);
+  });
   it("returns full HTML on browser visits", async () => {
     const app = buildApp();
     app.get("/", (_req, res) => {
