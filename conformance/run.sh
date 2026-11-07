@@ -2,9 +2,11 @@
 #
 # Official Inertia.js v3 conformance run.
 #
-# Clones inertiajs/inertia at a pinned commit, swaps its test server's protocol
-# helpers for a transport port backed by @blacklizard/inertia-express's core,
-# then runs the upstream Playwright suite against it. See conformance/HOW-IT-WORKS.md.
+# Clones inertiajs/inertia at a pinned commit and runs its Playwright suite
+# unmodified. A Node preload (conformance/preload.cjs) redirects the test
+# server's `require('./helpers')` to conformance/helpers.cjs — a transport port
+# backed by @blacklizard/inertia-express's core — so not one byte of the
+# upstream checkout is changed. See conformance/HOW-IT-WORKS.md.
 #
 # Usage:  conformance/run.sh [vue3|react|svelte]
 # Env:    INERTIA_REF  upstream commit/branch to test against (default: pinned)
@@ -40,10 +42,13 @@ echo "==> Installing + building upstream ($PKG)"
 ( cd "$INERTIA" && pnpm install && pnpm build:all )
 ( cd "$INERTIA" && pnpm -r --filter "./packages/$PKG/test-app" build )
 
-# 4. Apply the transport-port patch. Reset the working tree first so reruns
-#    are idempotent (the patch always applies from a clean upstream baseline).
-git -C "$INERTIA" checkout -- tests/app/helpers.js
-git -C "$INERTIA" apply "$CONF/helpers.patch"
+# 4. Guard the conformance claim: the upstream checkout must be pristine.
+#    (pnpm install may touch the lockfile; nothing else is allowed to differ.)
+if ! git -C "$INERTIA" diff --quiet -- . ':!pnpm-lock.yaml'; then
+  echo "!! upstream checkout is modified — refusing to run a conformance claim against it" >&2
+  git -C "$INERTIA" status --short >&2
+  exit 1
+fi
 
 # 5. Browser binary (+ OS deps on CI) and run.
 if [ -n "${CI:-}" ]; then
@@ -52,4 +57,6 @@ else
   ( cd "$INERTIA" && npx playwright install chromium )
 fi
 echo "==> Running conformance suite ($PKG)"
-( cd "$INERTIA" && PACKAGE="$PKG" node playwright.js --reporter=line --retries=2 )
+# NODE_OPTIONS flows playwright → pnpm serve → node server.js, where the
+# preload swaps helpers. In the runner/worker processes it is a harmless no-op.
+( cd "$INERTIA" && PACKAGE="$PKG" NODE_OPTIONS="--require $CONF/preload.cjs" node playwright.js --reporter=line --retries=2 )

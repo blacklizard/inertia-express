@@ -39,7 +39,8 @@ That claim is meaningful only if:
 - The adapter is the real published code — not a parallel implementation
   that only "feels like" the adapter.
 - The thing in the middle — the small shim that lets the upstream test server
-  drive the adapter — is small, readable, and doesn't fake the answer.
+  drive the adapter — is small, readable, doesn't fake the answer, and does
+  not modify the upstream checkout.
 
 The rest of this doc shows each of those.
 
@@ -86,53 +87,71 @@ they don't use `defer()`/`merge()`/`lazy()`/`always()` — they build the page
 object by hand. Plugging an adapter in cleanly would mean rewriting all 229
 route call sites, which would be a fork, not a conformance run.
 
-### 2.3 The seam: patch `helpers.js`, leave `server.js` alone
+### 2.3 The seam: swap `helpers.js` at require time, touch nothing
 
 The protocol-engine seam is `helpers.js`. So the approach is a **transport
-port** — a unified-diff patch applied to `helpers.js` that keeps page assembly
-byte-for-byte identical to upstream's but routes the protocol engine calls
-through the adapter's `core` instead of the suite's inline
-`processPartialProps`.
+port** — a replacement module, [`conformance/helpers.cjs`](./helpers.cjs),
+that keeps page assembly byte-for-byte identical to upstream's but routes the
+protocol engine calls through the adapter's `core` instead of the suite's
+inline `processPartialProps`.
 
-The patch ships as [`conformance/helpers.patch`](./helpers.patch). Shipping a
-*patch* — rather than a replacement file — is deliberate: the patch is short
-(~150 lines of diff), the diff *is* the change, and reviewers can read every
-modified line directly without comparing two files side-by-side.
+The swap happens at module-resolution time, not on disk.
+[`conformance/preload.cjs`](./preload.cjs) is a ~25-line Node preload
+(`NODE_OPTIONS=--require`) that hooks `Module._resolveFilename`: when
+`server.js` asks for `./helpers` and Node resolves that to the upstream
+`tests/app/helpers.js`, the hook returns `conformance/helpers.cjs` instead.
+Every other `require` resolves normally.
 
-`server.js` is **never touched**. The browser, the client, the spec
-assertions, the route handlers — all upstream. Only the ~200-LoC transport
-helper is modified, and the modification is visible as a diff.
+Consequence: the `inertiajs/inertia` checkout is **never modified** — no
+patch, no `git apply`, no reset step. `run.sh` enforces this: it refuses to
+run if `git diff` in the checkout is non-empty. `server.js`, the browser, the
+client, the spec assertions, the route handlers, the framework test-app — all
+upstream, all pristine. The only non-upstream code in the process is the
+~200-LoC transport module, and the suite output carries proof it was loaded
+(see §3).
 
 ---
 
 ## 3. The transport port — what changes, what doesn't
 
-The patch is [`conformance/helpers.patch`](./helpers.patch) — a unified diff
-against upstream's `tests/app/helpers.js` at the pinned commit (~150 lines of
-diff including context). Side-by-side:
+[`conformance/helpers.cjs`](./helpers.cjs) is upstream's `tests/app/helpers.js`
+at the pinned commit with one function swapped. `diff` it against the upstream
+file to see exactly what changed. Side-by-side:
 
-| Step                         | Upstream `helpers.js`               | Patched `helpers.js`                                                       |
+| Step                         | Upstream `helpers.js`               | `conformance/helpers.cjs`                                                  |
 | ---------------------------- | ----------------------------------- | ------------------------------------------------------------------------- |
 | Build initial page object    | `buildPageData(req, data)`          | **unchanged**                                                              |
 | Filter props for partial     | inline `processPartialProps`        | `core.resolveProps()` (the adapter's actual engine)                       |
-| Evaluate function-shaped props| `data.props[key](data.props)`      | wrap each as `core.lazy(() => fn(data.props))` so `resolveProps` evaluates|
+| Evaluate function-shaped props| `data.props[key](data.props)`      | passed to `resolveProps` as **bare closures** `() => fn(data.props)` — the engine must recognise and evaluate them itself, exactly as it does for a real route's props |
 | Merge `alwaysProps` bag      | `{...props, ...data.alwaysProps}`   | **unchanged, after `resolveProps`**                                       |
-| HTML templating              | read framework `index.html`, replace placeholders | **unchanged, every template branch**                       |
+| HTML templating              | read framework `index.html`, replace placeholders | **unchanged, every template branch** (paths re-rooted to the checkout) |
 | JSON vs HTML decision        | `if (req.get('X-Inertia'))`         | **unchanged**                                                              |
 | `location()` / `redirect()`  | 409 + `X-Inertia-Location` / `X-Inertia-Redirect` | **unchanged**                                                |
 | Imports                      | CommonJS `require`                  | CJS file using `await import(pathToFileURL(...))` once at module init     |
+| Module load                  | —                                   | writes `[conformance] helpers swapped → …` to stderr                      |
+
+The arity shim (`() => fn(data.props)`) is the one concession: upstream routes
+author function props as `(props) => …`, a convention of the reference server,
+not of the protocol. Nothing is pre-tagged — an earlier version of this port
+wrapped every closure in `core.lazy()`, which masked a real adapter bug
+(bare closures were silently dropped) for the suite's whole life. The port
+now hands the engine exactly what a route handler would.
 
 Because page assembly and HTML templating are unchanged, the bytes on the
 wire the Inertia client sees are the same **shape** as upstream's. The
 difference is *which code path produces those bytes* — for partial filtering
 and prop evaluation, it's the adapter's.
 
-`run.sh` `git checkout`s the upstream `helpers.js` first (reset to the
-committed baseline) then `git apply`s the patch, so reruns are idempotent and
-a stale working tree can never silently change the result.
+**Proof the swap happened.** Upstream's own `helpers.js` also passes this
+suite, so a green run alone does not show the adapter was in the loop. The
+replacement module therefore writes one line to stderr when it loads, and
+Playwright pipes its web server's stderr into the run output:
 
-The patch is small enough that you can read it end-to-end in five minutes and
-confirm there's no fudging.
+```
+[WebServer] [conformance] helpers swapped → …/conformance/helpers.cjs (core: …/packages/inertia-express/dist/core/index.js)
+```
+
+If that line is missing from a run, the run proves nothing.
 
 ---
 
@@ -148,8 +167,9 @@ short enough to keep in your head.
   partial-data / partial-except, version, error-bag, reset, method, URL)
 - **Partial-reload filtering** — `resolveProps` partial-include / exclude
   logic, including **dotted-path key matching** (`users.data` matches `users`)
-- **Prop evaluation** — `lazy`-wrapped evaluation pipeline (the engine that
-  also evaluates `optional`/`deferred`/`always` in real adapter usage)
+- **Prop evaluation** — bare-closure detection and evaluation (the same
+  pipeline that evaluates `lazy`/`optional`/`deferred`/`always` in real
+  adapter usage)
 - **Page-object assembly** — `createPage` normalization (history flags, optional
   field omission) is exercised indirectly through the same shape upstream
   produces
@@ -178,8 +198,9 @@ short enough to keep in your head.
   `getInitialPageFromDOM`. Real-browser hydration of the adapter's default
   format is verified against the example apps with a Playwright smoke check.
 
-Nothing in this layout is hidden — the patch is small, `server.js` is
-unchanged, and the spec files come from upstream.
+Nothing in this layout is hidden — the replacement module is small, the
+preload is tiny, the checkout is byte-for-byte upstream, and the run refuses
+to start otherwise.
 
 ---
 
@@ -227,9 +248,10 @@ CI runs the same command on every push to `main` and every pull request via
 `.github/workflows/conformance.yml`. Job timeout: 30 minutes.
 
 To inspect what the swap actually does, read
-[`conformance/helpers.patch`](./helpers.patch) — the unified diff IS the
-change. Or after a run, `cd conformance/inertia && git diff tests/app/helpers.js`
-shows the same patch applied to the working tree.
+[`conformance/preload.cjs`](./preload.cjs) (how) and diff
+[`conformance/helpers.cjs`](./helpers.cjs) against
+`conformance/inertia/tests/app/helpers.js` (what). After a run,
+`git -C conformance/inertia status` is empty — that is the point.
 
 ---
 
@@ -259,6 +281,13 @@ The bug had also been masked once during triage by a stale `dist/` build —
 the conformance server imports the built core, so the adapter is now
 rebuilt as the first step of `run.sh`.
 
+A second bug surfaced later, when the port stopped pre-wrapping function
+props in `core.lazy()` and handed the engine bare closures instead: the
+engine dropped them. 17 partial-reload specs and 1 precognition spec went red
+at once, all healed by teaching `resolveProps` to treat a bare function
+exactly like the reference server does. Lesson encoded in §3: the port must
+never rewrite its inputs, or the suite tests the port, not the adapter.
+
 ---
 
 ## 8. Known flake
@@ -278,13 +307,14 @@ conformance failures.
 
 ## 9. Last result
 
-vue3 / chromium, upstream pinned at `3a01522`:
+vue3 / chromium, upstream pinned at `ca14edec`, 2026-11-07, checkout
+pristine, swap marker present in output:
 
 ```
-1126 passed
+1185 passed
    1 failed   (links.spec.ts:899 — known scroll-region flake; fails identically on upstream helpers)
    3 flaky    (passed on retry)
-  20 skipped  (suite's own framework-conditional skips)
+  18 skipped  (suite's own framework-conditional skips)
 ```
 
 Zero adapter conformance failures. CI runs this on every PR.
