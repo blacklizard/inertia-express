@@ -33,6 +33,15 @@ describe("matchesExcept", () => {
   it("is true for an except entry or its descendant", () => {
     expect(matchesExcept("users.data.0", ["users.data"])).toBe(true);
     expect(matchesExcept("users.data", ["users.data"])).toBe(true);
-    expect(matchesExcept("users", ["users.data"])).toBe(false);
+  });
+
+  it("is true for an ancestor of an except entry (reference-server semantics)", () => {
+    expect(matchesExcept("users", ["users.data"])).toBe(true);
+    expect(matchesExcept("users", ["users.data.0"])).toBe(true);
+  });
+
+  it("is false for a sibling or a prefix that is not a path segment", () => {
+    expect(matchesExcept("users", ["userspace.data"])).toBe(false);
+    expect(matchesExcept("meta", ["users.data"])).toBe(false);
   });
 });

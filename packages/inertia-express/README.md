@@ -282,7 +282,7 @@ the client keep the current URL `#fragment` across that visit.
 Other changes to check when upgrading:
 
 - `merge(value, "id")` and `deepMerge(value, "id")` now throw a `TypeError` instead of silently ignoring the second argument. Use `.matchOn("id")`.
-- Partial reloads follow dotted paths. `except: users.data` now drops only `users.data` and keeps the rest of `users`. `only: users.data` on a plain-object `users` now returns just `{ users: { data } }`; children of a closure or descriptor still bypass filtering and come back whole. The upstream reference Node server used by the conformance suite applies `except` to the whole top-level key instead, so the two differ here (see conformance/HOW-IT-WORKS.md §9).
+- Partial reloads follow dotted paths. `only: users.data` on a plain-object `users` now returns just `{ users: { data } }`; children of a closure or descriptor still bypass filtering and come back whole. `except: users.data` drops the whole top-level `users`, as in 2.x and in the upstream reference server; inertia-laravel keeps `users` and drops only the child, and the adapter deliberately differs from it here.
 - Types: `DeferredProp` is renamed to `DeferProp`. `LazyProp`, `DeepMergeProp` and `PropValue` are removed. `MergeProp<T>` is now the descriptor interface returned by `merge()` / `deepMerge()`, not `T & {...}`.
 - Core-entry adapter authors who build these objects by hand: `InertiaPage.preserveFragment` is now required, and `InertiaRequestInfo` gains the required fields `exceptOnceProps` and `mergeIntent`.
 - `sharedProps` (the list of shared top-level keys) is now emitted on every page that has shared props.

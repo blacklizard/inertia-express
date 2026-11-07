@@ -184,7 +184,7 @@ describe("v3 protocol conformance", () => {
       expect(JSON.parse(r.text).props).toEqual({ users: { data: [1] } });
     });
 
-    it("a dotted partial-except key drops only the named nested path", async () => {
+    it("a dotted partial-except key drops the whole top-level prop", async () => {
       const app = buildApp();
       app.get("/", (_req, res) => void res.inertia("X", { users: { data: [1] }, meta: 2 }));
       const r = await request(app)
@@ -192,7 +192,7 @@ describe("v3 protocol conformance", () => {
         .set("x-inertia", "true")
         .set("x-inertia-partial-component", "X")
         .set("x-inertia-partial-except", "users.data");
-      expect(JSON.parse(r.text).props).toEqual({ users: {}, meta: 2 });
+      expect(JSON.parse(r.text).props).toEqual({ meta: 2 });
     });
   });
 

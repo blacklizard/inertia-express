@@ -317,11 +317,10 @@ vue3 / chromium, upstream pinned at release `v3.11.0` (commit `f312557`),
 2026-11-07, checkout pristine, swap marker present in output:
 
 ```
-1346 passed
+1347 passed
    0 failed
    3 flaky    (passed on retry; see §8)
   19 skipped  (suite's own framework-conditional skips)
-   1 excluded (see "Known divergence" below)
 ```
 
 The flaky cases were `tests/head.spec.ts:72` and `:113` and
@@ -329,17 +328,15 @@ The flaky cases were `tests/head.spec.ts:72` and `:113` and
 file is run alone against upstream's unmodified `helpers.js`, so it is timing in
 the suite, not the adapter.
 
-**Known divergence.** One upstream spec is excluded from this runner:
+**Nested `except`.** The reference Node server (`tests/app/helpers.js`,
+`processPartialProps`) filters top-level keys only and drops a key whenever
+any `X-Inertia-Partial-Except` entry equals it or lives under it:
+`except: ['auth.notifications']` drops the whole `auth` prop.
+inertia-laravel's `PropsResolver` keeps `auth` and drops only the child. The
+adapter follows the reference server (user ruling 2026-11-07), so
 `tests/nested-props.spec.ts` › "it preserves rescued child props when that
-child path is excluded from reload". The reference Node server
-(`tests/app/helpers.js`, `processPartialProps`) applies
-`X-Inertia-Partial-Except` one-directionally: `except: ['auth.notifications']`
-drops the whole top-level `auth` prop, and the spec asserts that outcome.
-inertia-laravel's `PropsResolver`, which this adapter ports, keeps `auth` and
-drops only `auth.notifications`. The adapter implements the Laravel behaviour,
-pinned by `tests/core/props-resolver.test.ts` ("nested prop is excluded via
-except header"). The exclusion is a `--grep-invert` on the Playwright launch
-line in `run.sh`; the upstream checkout is untouched.
+child path is excluded from reload" runs unmodified; the Laravel-only
+behaviour is pinned nowhere.
 
 Read §4 before reading anything into "0 failed": the routes pre-compute every
 v3 page key, so this number says the adapter's request parsing, partial

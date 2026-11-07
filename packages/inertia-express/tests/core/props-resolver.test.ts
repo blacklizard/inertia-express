@@ -220,9 +220,21 @@ describe("partial requests", () => {
     expect(r.props).toEqual({ other: "value", errors: { name: "required" } });
   });
 
-  it("nested prop is excluded via except header", async () => {
-    const r = await page({ auth: { user: "Jonathan", token: "secret" } }, partial("auth", "auth.token"));
-    expect(r.props).toEqual({ auth: { user: "Jonathan" } });
+  it("nested except entry drops the whole top-level prop (reference-server semantics)", async () => {
+    const r = await page(
+      { auth: { user: "Jonathan", token: "secret" }, status: "refreshed" },
+      partial("auth,status", "auth.token"),
+    );
+    expect(r.props).toEqual({ status: "refreshed" });
+  });
+
+  it("nested except entry drops the parent and leaves siblings untouched", async () => {
+    const r = await page(
+      { auth: { user: "Jonathan", notifications: defer(() => ["new"]) }, status: "refreshed" },
+      partialRequest(COMPONENT, { except: ["auth.notifications"] }),
+    );
+    expect(r.props).toEqual({ status: "refreshed" });
+    expect(r.metadata.deferredProps).toBeUndefined();
   });
 
   it("deeply nested optional prop is included on partial request", async () => {
@@ -521,17 +533,26 @@ describe("merge metadata", () => {
     expect(r.metadata.mergeProps).toBeUndefined();
   });
 
-  it("except header suppresses nested merge metadata", async () => {
+  it("except header for a nested path drops the plain parent and its children's merge metadata", async () => {
     const r = await page(
       { feed: { posts: merge([{ id: 1 }]), comments: merge([{ id: 2 }]) } },
       partial("feed.posts,feed.comments", "feed.posts"),
     );
-    expect(r.props).toEqual({ feed: { comments: [{ id: 2 }] } });
-    expect(r.metadata.mergeProps).toEqual(["feed.comments"]);
+    expect(r.props).toEqual({});
+    expect(r.metadata.mergeProps).toBeUndefined();
   });
 
   it("except header for parent suppresses all nested metadata", async () => {
     const r = await page({ feed: { posts: merge([{ id: 1 }]) }, other: "value" }, partial("feed,other", "feed"));
+    expect(r.props).toEqual({ other: "value" });
+    expect(r.metadata.mergeProps).toBeUndefined();
+  });
+
+  it("except header for a child suppresses the parent's merge metadata", async () => {
+    const r = await page(
+      { feed: merge({ posts: [{ id: 1 }] }).append("posts"), other: "value" },
+      partial("feed,other", "feed.posts"),
+    );
     expect(r.props).toEqual({ other: "value" });
     expect(r.metadata.mergeProps).toBeUndefined();
   });

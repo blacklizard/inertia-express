@@ -29,11 +29,16 @@ export function leadsToOnly(path: string, only: string[]): boolean {
 }
 
 /**
- * `true` when `path` matches an `except` entry or is a descendant of one.
+ * `true` when `path` equals an `except` entry, is a descendant of one, or is
+ * an ancestor of one. Matching ancestors mirrors the reference Node server,
+ * whose flat filter drops a top-level key whenever any `except` entry lives
+ * under it; inertia-laravel keeps the ancestor and drops only the child.
  *
  * @param path Dot-notation prop path to test.
  * @param except Requested partial-reload `except` paths.
  */
 export function matchesExcept(path: string, except: string[]): boolean {
-  return except.some((exceptPath) => pathIsSameOrDescendant(path, exceptPath));
+  return except.some(
+    (exceptPath) => pathIsSameOrDescendant(path, exceptPath) || pathIsSameOrDescendant(exceptPath, path),
+  );
 }

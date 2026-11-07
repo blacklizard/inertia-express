@@ -551,7 +551,7 @@ export default class PropsResolver {
 
   /**
    * Determine if the path matches the partial request using bidirectional
-   * prefix matching on the only list and descendant matching on the except list.
+   * prefix matching on both the only list and the except list.
    *
    * @param path Dot path of the prop.
    */
