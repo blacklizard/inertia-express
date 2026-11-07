@@ -27,6 +27,7 @@ interface InertiaResponseOptions {
   url?: string;           // Override URL in the page object (default: req.originalUrl)
   clearHistory?: boolean; // Tell the client to clear browser history
   encryptHistory?: boolean; // Tell the client to encrypt history state
+  preserveFragment?: boolean; // Tell the client to keep the current URL #fragment across this visit
 }
 ```
 
@@ -74,11 +75,21 @@ interface InertiaPage {
   version: string | null;
   clearHistory: boolean;
   encryptHistory: boolean;
-  deferredProps?: Record<string, string[]>; // groups → keys for deferred props
-  mergeProps?: string[];                     // keys using merge() behaviour
-  deepMergeProps?: string[];                 // keys using deepMerge() behaviour
+  preserveFragment: boolean;                 // keep the URL #fragment across this visit
+  sharedProps?: string[];                    // top-level keys that came from shared props
+  mergeProps?: string[];                     // paths the client appends (merge(), scroll())
+  prependProps?: string[];                   // paths the client prepends (.prepend())
+  deepMergeProps?: string[];                 // paths using deepMerge() behaviour
   matchPropsOn?: string[];                   // dotted prop.field match-on paths
+  deferredProps?: Record<string, string[]>; // groups → paths of deferred props
+  rescuedProps?: string[];                   // deferred props whose producer threw (.rescue())
+  scrollProps?: Record<string, ScrollMetadata & { reset: boolean }>; // scroll() pagination, by path
+  onceProps?: Record<string, OnceMetadata>;  // once() props, by once key: { prop, expiresAt }
+  flash?: unknown;                           // read-once flash data (top-level, not a prop)
 }
+```
+
+Metadata keys are omitted when empty. See [Props](/core/props) for the helpers that produce them and [API: Types](/api/types#inertiapage) for `ScrollMetadata` / `OnceMetadata`.
 ```
 
 ## Partial reloads
@@ -90,6 +101,8 @@ When the client triggers a partial reload, it sends:
 - `X-Inertia-Partial-Except` — comma-separated prop keys to exclude
 
 The middleware applies this filtering automatically. Filtering only applies when `X-Inertia-Partial-Component` matches the rendered component, so cross-page navigations never drop props.
+
+Keys may be dotted paths. `only: users.data` on a plain-object `users` returns just `{ users: { data } }`; children of a closure or descriptor bypass filtering and come back whole. `except: users.data` drops the whole top-level `users`, as in 2.x and in the upstream reference server (inertia-laravel keeps `users` and drops only the child; the adapter deliberately differs from it here).
 
 ## `encodePageScript(page)`
 

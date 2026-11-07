@@ -23,6 +23,7 @@ interface InertiaMiddlewareOptions {
   cache?: InertiaCacheOptions;
   edgeCache?: EdgeCachePolicy;
   flashFromSession?: boolean;
+  onRescue?: (error: unknown, path: string, req: Request) => void;
 }
 
 type VersionResolver<Req> =
@@ -52,6 +53,8 @@ interface SsrRendererInput {
 }
 ```
 
+`onRescue` is called whenever a deferred prop marked [`.rescue()`](/api/props#defer-fn-group) throws. The prop is dropped from the page and its path is listed in `rescuedProps`. Without a hook the error is logged with `console.error`. A throw or rejected promise from the hook itself is logged with `console.error` and never propagated.
+
 ---
 
 ## `res.inertia(component, props?, options?)`
@@ -60,6 +63,7 @@ Render an Inertia page. Returns `Promise<void>`.
 
 ```ts
 await res.inertia("Dashboard", { stats }, { url: "/custom-url" });
+await res.inertia("Docs/Show", { doc }, { preserveFragment: true });
 ```
 
 ### `InertiaResponseOptions`
@@ -69,6 +73,7 @@ interface InertiaResponseOptions {
   url?: string;
   clearHistory?: boolean;
   encryptHistory?: boolean;
+  preserveFragment?: boolean; // sets page.preserveFragment: client keeps the URL #fragment
 }
 ```
 

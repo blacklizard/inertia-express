@@ -29,6 +29,7 @@ interface InertiaMiddlewareOptions {
   cache?: InertiaCacheOptions;
   edgeCache?: EdgeCachePolicy;
   flashFromSession?: boolean;
+  onRescue?: (error: unknown, path: string, req: Request) => void;
 }
 
 type VersionResolver<Req> =
@@ -146,6 +147,20 @@ res.inertiaFlash({ success: "Saved!" });
 
 See [Redirects & Errors → Flash messages](/core/redirects#flash-messages) for the full flow and the `connect-flash` migration guide.
 
+### `onRescue`
+
+Called whenever a deferred prop marked [`.rescue()`](/core/props#rescuing-failures) throws during resolution. The failing prop is dropped from the page and its path is listed in the page object's `rescuedProps`; use this hook to log or report the swallowed error. Without it, rescued errors are logged with `console.error`.
+
+```ts
+inertia({
+  onRescue: (error, path, req) => {
+    logger.warn({ err: error, prop: path, url: req.originalUrl }, "Inertia prop rescued");
+  },
+});
+```
+
+Failures of the hook itself are contained: a synchronous throw or a rejected returned promise is logged with `console.error` and never propagates or surfaces as an unhandled rejection.
+
 ## Request augmentation
 
 After the middleware runs, `req.inertia` is populated:
@@ -159,6 +174,8 @@ interface InertiaRequestInfo {
   partialExcept: string[] | null;   // X-Inertia-Partial-Except (split by comma)
   errorBag: string | null;          // X-Inertia-Error-Bag
   resetKeys: string[] | null;       // X-Inertia-Reset (split by comma)
+  exceptOnceProps: string[];        // X-Inertia-Except-Once-Props (split by comma; [] when absent)
+  mergeIntent: "append" | "prepend"; // X-Inertia-Infinite-Scroll-Merge-Intent ("prepend" only on that exact value)
   method: string;                   // uppercased HTTP method
   url: string;                      // request URL (from req.originalUrl)
 }

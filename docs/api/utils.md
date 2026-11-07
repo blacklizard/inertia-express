@@ -169,7 +169,7 @@ interface ComputeCacheKeyInput {
   prefix: string;            // cache namespace, e.g. "inertia:ssr"
   version: string | null;    // asset version (becomes part of the key)
   component: string;
-  props: PageProps;          // fully-resolved props (post shared-merge, post-lazy)
+  props: PageProps;          // fully-resolved props (post shared-merge, post-resolution)
   discriminator?: string;    // optional extra discriminator
 }
 

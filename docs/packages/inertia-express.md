@@ -39,12 +39,16 @@ pnpm add @blacklizard/inertia-express express
 
 | Export | Description |
 |--------|-------------|
-| `lazy(fn)` | Evaluated every visit (full and partial) |
 | `optional(fn)` | Only included on partial reloads when requested |
-| `defer(fn, group?)` | Excluded from initial visit; auto-fetched after mount |
-| `always(fn)` | Included on every response regardless of partial filtering |
-| `merge(value, matchOn?)` | Client appends instead of replaces on partial reload |
-| `deepMerge(value, matchOn?)` | Client recursively deep-merges instead of shallow-appending |
+| `defer(fn, group?)` | Excluded from initial visit; auto-fetched after mount. Chains `.merge()`, `.deepMerge()`, `.rescue()`, `.once()` |
+| `always(value)` | Included on every response regardless of partial filtering |
+| `merge(value)` | Client appends instead of replaces; chain `.append()`, `.prepend()`, `.matchOn()` for nested paths and dedupe |
+| `deepMerge(value)` | Client recursively deep-merges instead of appending |
+| `once(fn)` | Resolved once and cached by the client across visits; chain `.as()`, `.until()`, `.fresh()` |
+| `scroll(fn, { metadata, wrapper? })` | Infinite-scroll prop merged at its wrapper key, with pagination metadata |
+| `isPropDescriptor(value)` | Type guard for descriptors built by the helpers above |
+
+A bare closure (`() => value`) is evaluated on each response that includes it and needs no helper. See [Props](/core/props).
 
 ### Versioning
 

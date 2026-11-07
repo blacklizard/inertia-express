@@ -4,7 +4,7 @@
 
 ### `InertiaPage`
 
-The page object sent to the client, following the Inertia v3 spec.
+The page object sent to the client, following the Inertia v3 spec. Metadata keys are omitted when empty.
 
 ```ts
 interface InertiaPage<TProps extends PageProps = PageProps> {
@@ -14,10 +14,17 @@ interface InertiaPage<TProps extends PageProps = PageProps> {
   version: string | null;
   clearHistory: boolean;
   encryptHistory: boolean;
-  deferredProps?: Record<string, string[]>;
-  mergeProps?: string[];
-  deepMergeProps?: string[];
-  matchPropsOn?: string[];
+  preserveFragment: boolean;                 // required since 3.0
+  sharedProps?: string[];                    // top-level keys that came from shared props
+  mergeProps?: string[];                     // paths the client appends
+  prependProps?: string[];                   // paths the client prepends
+  deepMergeProps?: string[];                 // paths the client deep-merges
+  matchPropsOn?: string[];                   // dotted prop.field match-on paths
+  deferredProps?: Record<string, string[]>;  // group → deferred prop paths
+  rescuedProps?: string[];                   // deferred props whose producer threw and was rescued
+  scrollProps?: Record<string, ScrollMetadata & { reset: boolean }>; // keyed by prop path
+  onceProps?: Record<string, OnceMetadata>;  // keyed by once key
+  flash?: unknown;                           // read-once flash data (top-level, not a prop)
 }
 ```
 
@@ -34,10 +41,66 @@ interface InertiaRequestInfo {
   partialExcept: string[] | null;
   errorBag: string | null;
   resetKeys: string[] | null;
+  exceptOnceProps: string[];          // X-Inertia-Except-Once-Props; [] when absent
+  mergeIntent: "append" | "prepend";  // X-Inertia-Infinite-Scroll-Merge-Intent; "prepend" only on that exact value
   method: string;
   url: string;
 }
 ```
+
+### `ScrollMetadata`
+
+Pagination metadata for one [`scroll()`](/api/props#scroll-fn-options) prop.
+
+```ts
+interface ScrollMetadata {
+  pageName: string;
+  previousPage: number | string | null;
+  nextPage: number | string | null;
+  currentPage: number | string | null;
+}
+```
+
+### `OnceMetadata`
+
+Metadata for one [`once()`](/api/props#once-fn) prop: the prop path it resolves and its expiry as a millisecond epoch timestamp, or `null` when it never expires.
+
+```ts
+interface OnceMetadata {
+  prop: string;
+  expiresAt: number | null;
+}
+```
+
+### `PropsMetadata`
+
+Page-level metadata produced by [`resolveProps`](/api/props#resolveprops-input-core); every key is omitted when empty.
+
+```ts
+interface PropsMetadata {
+  sharedProps?: string[];
+  mergeProps?: string[];
+  prependProps?: string[];
+  deepMergeProps?: string[];
+  matchPropsOn?: string[];
+  deferredProps?: Record<string, string[]>;
+  rescuedProps?: string[];
+  scrollProps?: Record<string, ScrollMetadata & { reset: boolean }>;
+  onceProps?: Record<string, OnceMetadata>;
+}
+```
+
+### `RescueHandler`
+
+Core-level rescue hook passed to `resolveProps`. The Express middleware's [`onRescue`](/api/middleware#inertiamiddlewareoptions) option adds the request as a third argument. A synchronous throw or rejected promise from the hook is logged with `console.error` and never propagated.
+
+```ts
+type RescueHandler = (error: unknown, path: string) => void;
+```
+
+### Prop descriptor types
+
+`OptionalProp<T>`, `DeferProp<T>`, `AlwaysProp<T>`, `MergeProp<T>`, `OnceProp<T>`, `ScrollProp<T>` and `ScrollOptions<T>` are documented in [Props API → Type definitions](/api/props#type-definitions).
 
 ### `PageProps`
 
@@ -66,6 +129,7 @@ interface InertiaResponseOptions {
   url?: string;
   clearHistory?: boolean;
   encryptHistory?: boolean;
+  preserveFragment?: boolean;
 }
 ```
 
@@ -172,6 +236,8 @@ const INERTIA_HEADERS = {
   errorBag: "x-inertia-error-bag",
   reset: "x-inertia-reset",
   location: "x-inertia-location",
+  exceptOnceProps: "x-inertia-except-once-props",
+  mergeIntent: "x-inertia-infinite-scroll-merge-intent",
 };
 
 const INERTIA_REDIRECT_STATUS = 303;

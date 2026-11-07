@@ -24,7 +24,7 @@ features:
   - title: Production SSR
     details: Out-of-process SSR worker with timeout, retries, circuit breaker, and graceful drain. Pairs with an in-process or Redis view cache.
   - title: Smart Prop Loading
-    details: lazy(), optional(), defer(), always(), merge(), and deepMerge() helpers give fine-grained control over when and how props are evaluated and sent to the client.
+    details: optional(), defer(), always(), merge(), deepMerge(), once(), and scroll() helpers give fine-grained control over when and how props are evaluated, merged, cached, and sent to the client.
   - title: CDN Ready
     details: Pluggable edge-cache policy applies Cache-Control headers with correct Vary directives so CDNs can safely cache HTML shells.
   - title: Framework-Agnostic Core

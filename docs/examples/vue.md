@@ -16,7 +16,7 @@ pnpm add -D vite @vitejs/plugin-vue typescript tsx
 
 ```ts
 // server/index.ts
-import { defer, inertia, lazy } from "@blacklizard/inertia-express";
+import { defer, inertia } from "@blacklizard/inertia-express";
 import express from "express";
 
 const app = express();
@@ -49,7 +49,7 @@ app.use(
 app.get("/", async (_req, res) => {
   await res.inertia("Home", {
     greeting: "Hello from Express + Inertia + Vue",
-    timestamp: lazy(() => new Date().toISOString()),
+    timestamp: () => new Date().toISOString(),
     stats: defer(async () => {
       await new Promise((r) => setTimeout(r, 250));
       return { computed: true };

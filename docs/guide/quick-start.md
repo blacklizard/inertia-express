@@ -95,6 +95,6 @@ inertia({
 ## Next steps
 
 - [Middleware configuration](/core/middleware) — all available options
-- [Props](/core/props) — lazy, optional, deferred, and merge props
+- [Props](/core/props) — optional, deferred, merge, once, and infinite-scroll props
 - [SSR](/advanced/ssr) — server-side rendering setup
 - [Examples](/examples/vue) — full working examples
