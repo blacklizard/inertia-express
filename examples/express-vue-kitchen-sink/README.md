@@ -119,7 +119,7 @@ All data is in-memory. Changes survive the process lifetime; restart to reset.
 |---|---|
 | Precognition | Requires `laravel-precognition-vue` — Laravel-specific |
 | Wayfinder | Codegen from Laravel artisan — replaced with static shims |
-| Infinite Scroll | Requires `Inertia::scroll()` server protocol extension — Laravel-only |
+| Infinite Scroll | Not ported yet; the adapter ships `scroll()` since 3.0, so this page can now be added |
 
 ## Server layout
 

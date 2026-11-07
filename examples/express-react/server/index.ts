@@ -1,4 +1,4 @@
-import { inertia, lazy } from "@blacklizard/inertia-express";
+import { inertia } from "@blacklizard/inertia-express";
 import express from "express";
 
 const app = express();
@@ -36,7 +36,8 @@ app.use(
 app.get("/", async (_req, res) => {
   await res.inertia("Home", {
     greeting: "Hello from Express + Inertia + React",
-    now: lazy(() => Date.now()),
+    // Bare closure — evaluated on every response that includes it.
+    now: () => Date.now(),
   });
 });
 

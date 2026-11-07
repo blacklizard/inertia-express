@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { always, defer, deepMerge, inertia, lazy, merge, optional } from "@blacklizard/inertia-express";
+import { always, defer, deepMerge, inertia, merge, optional } from "@blacklizard/inertia-express";
 import express from "express";
 import session from "express-session";
 import { createServer as createViteServer } from "vite";
@@ -86,8 +86,8 @@ app.get("/props", async (_req, res) => {
   await res.inertia("Props", {
     // Plain — evaluated now, always sent.
     serverTime: new Date().toISOString(),
-    // Lazy — evaluated every visit (full or partial) when included.
-    quote: lazy(() => QUOTES[Math.floor(Math.random() * QUOTES.length)]),
+    // Bare closure — evaluated every visit (full or partial) when included.
+    quote: () => QUOTES[Math.floor(Math.random() * QUOTES.length)],
     // Optional — omitted unless a partial reload names it.
     heavyStats: optional(async () => {
       await new Promise((r) => setTimeout(r, 150));
@@ -126,9 +126,9 @@ app.get("/merge", async (req, res) => {
   }));
   await res.inertia("Merge", {
     page,
-    // Merge — appended to the client-side prop on partial reloads. `matchOn`
+    // Merge — appended to the client-side prop on partial reloads. `.matchOn()`
     // dedupes by `id`. A reload with `reset: ["items"]` replaces instead.
-    items: merge(items, "id"),
+    items: merge(items).matchOn("id"),
     // Deep-merge — recursively merged into the existing prop.
     settings: deepMerge({ display: { density: "comfortable" } }),
   });

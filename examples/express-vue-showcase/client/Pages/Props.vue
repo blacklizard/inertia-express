@@ -14,7 +14,7 @@ defineProps<{
   heavyStats?: { rows: number; computedAt: string };
 }>();
 
-// Partial reload — refetch only the named props. `quote` (lazy) and
+// Partial reload — refetch only the named props. `quote` (bare closure) and
 // `liveTick` (always) change; `heavyStats` is left untouched.
 function reloadQuote() {
   router.reload({ only: ["quote"] });
@@ -45,7 +45,7 @@ function loadStats() {
       <Card class="gap-3 py-4">
         <CardHeader>
           <CardTitle class="flex items-center gap-2 text-base">
-            <Badge variant="outline">lazy()</Badge>
+            <Badge variant="outline">closure</Badge>
             <code class="text-sm font-normal text-muted-foreground">quote</code>
           </CardTitle>
           <CardDescription>Evaluated every visit (full or partial) when included.</CardDescription>

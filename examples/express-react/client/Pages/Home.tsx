@@ -9,7 +9,7 @@ export default function Home({ greeting, now, auth }: Props) {
     <main>
       <h1>{greeting}</h1>
       <p>User: {auth.user.name}</p>
-      <p>Now (lazy): {now}</p>
+      <p>Now (closure): {now}</p>
     </main>
   );
 }

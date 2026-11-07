@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardTitle } from "../components/ui/
 defineOptions({ layout: Layout });
 
 const demos = [
-  { href: "/props", title: "Props", blurb: "lazy(), optional(), always() and partial reloads." },
+  { href: "/props", title: "Props", blurb: "bare closures, optional(), always() and partial reloads." },
   { href: "/deferred", title: "Deferred", blurb: "defer() props loaded automatically after mount." },
   { href: "/merge", title: "Merge", blurb: "merge() pagination, deepMerge(), X-Inertia-Reset." },
   { href: "/history", title: "History", blurb: "clearHistory / encryptHistory page flags." },

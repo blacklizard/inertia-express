@@ -21,7 +21,7 @@ adapter's `ssr` option. First paint is server-rendered; navigation is SPA.
 | Route       | Demonstrates                                                        |
 | ----------- | ------------------------------------------------------------------- |
 | `/`         | Intro + links                                                       |
-| `/props`    | Plain prop, `lazy()`, `optional()`, `always()`; partial reloads      |
+| `/props`    | Plain prop, bare closure, `optional()`, `always()`; partial reloads |
 | `/deferred` | `defer()` props — loaded automatically after mount, grouped         |
 | `/merge`    | `merge()` paginated list (load more), `deepMerge()`, `X-Inertia-Reset` |
 | `/history`  | `clearHistory` / `encryptHistory` page flags                        |
