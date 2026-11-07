@@ -66,7 +66,17 @@ describe("inertia middleware", () => {
     app.get("/action", (_req, res) => res.redirect("/search?q=a%23b"));
     const r = await request(app).get("/action").set("x-inertia", "true");
     expect(r.status).toBe(302);
+    expect(r.headers.location).toBe("/search?q=a%23b");
   });
+
+  it("a fragment redirect with non-Latin1 characters does not throw", async () => {
+    const app = buildApp();
+    app.get("/action", (_req, res) => res.redirect("/日本#x"));
+    const r = await request(app).get("/action").set("x-inertia", "true");
+    expect(r.status).toBe(409);
+    expect(r.headers["x-inertia-redirect"]).toBe("/%E6%97%A5%E6%9C%AC#x");
+  });
+
   it("returns full HTML on browser visits", async () => {
     const app = buildApp();
     app.get("/", (_req, res) => {

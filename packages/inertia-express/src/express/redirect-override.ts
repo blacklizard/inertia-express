@@ -1,3 +1,5 @@
+import encodeUrl from 'encodeurl';
+
 import { INERTIA_HEADERS, inertiaRedirectStatus } from '../core/index.js';
 
 import type { Request, Response } from 'express';
@@ -35,7 +37,7 @@ export default function installRedirectOverride(req: Request, res: Response): vo
     }
 
     if (url.includes('#') && !req.inertia?.isPrefetch) {
-      res.status(409).setHeader(INERTIA_HEADERS.redirect, url).end();
+      res.status(409).setHeader(INERTIA_HEADERS.redirect, encodeUrl(url)).end();
 
       return;
     }
