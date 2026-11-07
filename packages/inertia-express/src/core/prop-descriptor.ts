@@ -69,8 +69,6 @@ export default class PropDescriptor<T = unknown> {
 
   scrollMetadata: ScrollMetadata | ((resolved: T) => ScrollMetadata) | null = null;
 
-  private memo: { value: T } | null = null;
-
   /**
    * Create a descriptor around a prop source.
    *
@@ -275,25 +273,13 @@ export default class PropDescriptor<T = unknown> {
 
   /**
    * Resolve the source: call it when it is a function, then await the result.
-   * A scroll descriptor memoises the first successful result, as
-   * `ScrollProp::__invoke` caches `$resolved`: its value is read both for the
-   * response and for its pagination metadata, so the source runs only once.
-   * Other kinds re-run the source on every call.
    */
   async resolveSource(): Promise<T> {
-    if (this.kind === 'scroll' && this.memo !== null) {
-      return this.memo.value;
+    if (typeof this.source === 'function') {
+      return (this.source as () => T | Promise<T>)();
     }
 
-    const value = typeof this.source === 'function'
-      ? await (this.source as () => T | Promise<T>)()
-      : await this.source;
-
-    if (this.kind === 'scroll') {
-      this.memo = { value };
-    }
-
-    return value;
+    return this.source;
   }
 
   /**

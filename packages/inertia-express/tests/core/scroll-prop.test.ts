@@ -1,6 +1,9 @@
 /**
  * Port of inertia-laravel tests/ScrollPropTest.php. Skipped:
  * - test_resolves_meta_data (paginator inference): no paginator class; metadata is explicit here.
+ * - test_scroll_prop_value_is_resolved_only_once: the reference caches the value on the prop because
+ *   metadata() re-invokes it; here metadataFor() receives the resolved value, and a per-descriptor cache
+ *   would serve stale data to later requests when a descriptor is hoisted to module level.
  * - Laravel `User::query()->paginate(15)` fixtures become `{ data: [...] }` objects with explicit metadata.
  */
 import { describe, expect, it } from "vitest";
@@ -62,21 +65,17 @@ describe("ScrollProp", () => {
     expect(second.metadata.prependProps).toBeUndefined();
   });
 
-  it("scroll prop value is resolved only once", async () => {
+  it("scroll prop value is resolved fresh on every request", async () => {
     let callCount = 0;
-    const p = d(
-      scroll(() => {
-        callCount += 1;
-        return { data: ["item1", "item2", "item3"] };
-      }, { metadata: meta }),
-    );
-    const v1 = await p.resolveSource();
-    const v2 = await p.resolveSource();
-    const v3 = await p.resolveSource();
-    expect(callCount).toBe(1);
-    expect(v1).toBe(v2);
-    expect(v2).toBe(v3);
-    expect(v1).toEqual({ data: ["item1", "item2", "item3"] });
+    const p = scroll(() => {
+      callCount += 1;
+      return { data: [callCount] };
+    }, { metadata: meta });
+    const first = await page({ users: p });
+    const second = await page({ users: p });
+    expect(callCount).toBe(2);
+    expect(first.props).toEqual({ users: { data: [1] } });
+    expect(second.props).toEqual({ users: { data: [2] } });
   });
 
   it("deferred scroll prop is excluded from initial request", async () => {
