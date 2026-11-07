@@ -303,6 +303,8 @@ describe("inertia middleware", () => {
     const r = await request(app).get("/x").set("x-inertia", "true").set("x-inertia-version", "v1");
     expect(r.status).toBe(409);
     expect(r.headers["x-inertia-location"]).toBe("/x");
+    expect(r.headers["x-inertia-version"]).toBe("v2");
+    expect(r.text).toBe("");
   });
 
   it("does not trigger version mismatch when versions match", async () => {

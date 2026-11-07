@@ -255,6 +255,8 @@ describe("v3 protocol conformance", () => {
       const r = await request(app).get("/page").set("x-inertia", "true").set("x-inertia-version", "stale");
       expect(r.status).toBe(409);
       expect(r.headers["x-inertia-location"]).toBe("/page");
+      expect(r.headers["x-inertia-version"]).toBe("v2");
+      expect(r.text).toBe("");
     });
   });
 

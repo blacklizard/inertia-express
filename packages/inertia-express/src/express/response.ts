@@ -109,12 +109,21 @@ function resolveFlashData(ctx: RenderContext, req: Request): unknown {
 /**
  * Send the Inertia version-mismatch response: 409 with `X-Inertia-Location`
  * pointing back at the same URL so the client performs a hard reload.
+ * Mirrors `Middleware::onVersionChange` in inertia-laravel, which also sends
+ * `X-Inertia-Version` with the current server version.
  *
  * @param res Outgoing Express response.
  * @param url Location to send the client to (typically the requested URL).
+ * @param version Current server version; sent as `X-Inertia-Version` when a non-null string.
  */
-export function sendVersionMismatch(res: Response, url: string): void {
-  res.status(INERTIA_LOCATION_STATUS).setHeader(INERTIA_HEADERS.location, url).end();
+export function sendVersionMismatch(res: Response, url: string, version?: string | null): void {
+  res.status(INERTIA_LOCATION_STATUS).setHeader(INERTIA_HEADERS.location, url);
+
+  if (typeof version === 'string') {
+    res.setHeader(INERTIA_HEADERS.version, version);
+  }
+
+  res.end();
 }
 
 /**
@@ -375,7 +384,7 @@ export async function sendInertiaResponse(
   const version = await resolveVersion(ctx.options.version, req);
 
   if (info.isInertia && info.method === 'GET' && isVersionMismatch(version, info.version)) {
-    sendVersionMismatch(res, url);
+    sendVersionMismatch(res, url, version);
 
     return;
   }
