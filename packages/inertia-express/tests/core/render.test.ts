@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { InertiaRequestInfo } from "../../src/core/index.js";
 import { deepMerge, defer, merge } from "../../src/core/index.js";
+import { vi } from "vitest";
 import { buildPage } from "../../src/core/render.js";
 
 const baseRequest: InertiaRequestInfo = {
@@ -11,6 +12,8 @@ const baseRequest: InertiaRequestInfo = {
   partialExcept: null,
   errorBag: null,
   resetKeys: null,
+  exceptOnceProps: [],
+  mergeIntent: "append",
   method: "GET",
   url: "/x",
 };
@@ -99,7 +102,7 @@ describe("buildPage", () => {
   it("forwards deepMergeProps and matchPropsOn into the page object", async () => {
     const page = await buildPage({
       component: "Feed",
-      props: { rows: deepMerge([{ id: 1 }], "id") },
+      props: { rows: deepMerge([{ id: 1 }]).matchOn("id") },
       request: baseRequest,
       req: {},
       shared: undefined,
@@ -108,6 +111,53 @@ describe("buildPage", () => {
     expect(page.deepMergeProps).toEqual(["rows"]);
     expect(page.matchPropsOn).toEqual(["rows.id"]);
     expect(page.mergeProps).toBeUndefined();
+  });
+
+  it("forwards nested merge paths and shared prop keys", async () => {
+    const page = await buildPage({
+      component: "Feed",
+      props: { users: merge({ data: [1] }).append("data") },
+      request: baseRequest,
+      req: {},
+      shared: { auth: 1 },
+      version: null,
+    });
+    expect(page.mergeProps).toEqual(["users.data"]);
+    expect(page.sharedProps).toEqual(["auth"]);
+    expect(page.preserveFragment).toBe(false);
+  });
+
+  it("reports a rescued prop through onRescue and lists it in rescuedProps", async () => {
+    const onRescue = vi.fn();
+    const page = await buildPage({
+      component: "X",
+      props: {
+        x: defer(async () => {
+          throw new Error("no");
+        }).rescue(),
+      },
+      request: { ...baseRequest, isInertia: true, partialComponent: "X", partialOnly: ["x"] },
+      req: {},
+      shared: undefined,
+      version: null,
+      onRescue,
+    });
+    expect(page.props.x).toBeUndefined();
+    expect(page.rescuedProps).toEqual(["x"]);
+    expect(onRescue).toHaveBeenCalledWith(expect.any(Error), "x");
+  });
+
+  it("forwards preserveFragment", async () => {
+    const page = await buildPage({
+      component: "X",
+      props: {},
+      request: baseRequest,
+      req: {},
+      shared: undefined,
+      version: null,
+      options: { preserveFragment: true },
+    });
+    expect(page.preserveFragment).toBe(true);
   });
 
   it("propagates rejection when shared async function rejects", async () => {

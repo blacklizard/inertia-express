@@ -1,8 +1,8 @@
 import { createPage } from './page.js';
-import { resolveProps } from './props.js';
+import { resolveProps } from './props-resolver.js';
 
 import type {
-  InertiaPage, InertiaRequestInfo, PageProps, RenderOptions, SharedPropsInput,
+  InertiaPage, InertiaRequestInfo, PageProps, RenderOptions, RescueHandler, SharedPropsInput,
 } from './types.js';
 
 /**
@@ -22,6 +22,10 @@ export interface BuildPageInput<TReq = unknown> {
    * caller (e.g. from the session); omitted from the page when nullish/empty.
    */
   flash?: unknown;
+  /**
+   * Called with the error and dotted path whenever a rescued prop throws.
+   */
+  onRescue?: RescueHandler;
 }
 
 /**
@@ -53,8 +57,9 @@ async function evaluateShared<TReq>(shared: SharedPropsInput<TReq> | undefined, 
  *   - JSON serialization on `X-Inertia` requests, or
  *   - embedding into the root HTML view via a `<script>` page tag.
  *
- * @param input Component, props, parsed request, shared resolver, version, and
- *   optional `clearHistory` / `encryptHistory` flags.
+ * @param input Component, props, parsed request, shared resolver, version,
+ *   optional `clearHistory` / `encryptHistory` / `preserveFragment` flags, and
+ *   an optional rescue handler.
  */
 export async function buildPage<TReq>(input: BuildPageInput<TReq>): Promise<InertiaPage> {
   const sharedProps = await evaluateShared(input.shared, input.req);
@@ -64,6 +69,7 @@ export async function buildPage<TReq>(input: BuildPageInput<TReq>): Promise<Iner
     shared: sharedProps,
     component: input.component,
     request: input.request,
+    onRescue: input.onRescue,
   });
 
   return createPage({
@@ -73,10 +79,8 @@ export async function buildPage<TReq>(input: BuildPageInput<TReq>): Promise<Iner
     version: input.version,
     clearHistory: input.options?.clearHistory,
     encryptHistory: input.options?.encryptHistory,
-    deferredProps: resolved.deferred,
-    mergeProps: resolved.merge,
-    deepMergeProps: resolved.deepMerge,
-    matchPropsOn: resolved.matchOn,
+    preserveFragment: input.options?.preserveFragment,
+    metadata: resolved.metadata,
     flash: input.flash,
   });
 }

@@ -7,7 +7,7 @@
 import express from "express";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
-import { always, deepMerge, defer, inertia, lazy, merge, optional } from "../../src/express/index.js";
+import { always, deepMerge, defer, inertia, merge, once, optional } from "../../src/express/index.js";
 
 function buildApp(opts: Parameters<typeof inertia>[0] = {}) {
   const app = express();
@@ -67,9 +67,9 @@ describe("v3 protocol conformance", () => {
   });
 
   describe("prop helpers", () => {
-    it("lazy props are evaluated and included on full visits", async () => {
+    it("bare closure props are evaluated and included on full visits", async () => {
       const app = buildApp();
-      app.get("/", (_req, res) => void res.inertia("X", { v: lazy(async () => 7) }));
+      app.get("/", (_req, res) => void res.inertia("X", { v: async () => 7 }));
       const r = await request(app).get("/").set("x-inertia", "true");
       expect(JSON.parse(r.text).props.v).toBe(7);
     });
@@ -184,7 +184,7 @@ describe("v3 protocol conformance", () => {
       expect(JSON.parse(r.text).props).toEqual({ users: { data: [1] } });
     });
 
-    it("a dotted partial-except key drops the matching top-level prop", async () => {
+    it("a dotted partial-except key drops only the named nested path", async () => {
       const app = buildApp();
       app.get("/", (_req, res) => void res.inertia("X", { users: { data: [1] }, meta: 2 }));
       const r = await request(app)
@@ -192,7 +192,7 @@ describe("v3 protocol conformance", () => {
         .set("x-inertia", "true")
         .set("x-inertia-partial-component", "X")
         .set("x-inertia-partial-except", "users.data");
-      expect(JSON.parse(r.text).props).toEqual({ meta: 2 });
+      expect(JSON.parse(r.text).props).toEqual({ users: {}, meta: 2 });
     });
   });
 
@@ -208,12 +208,21 @@ describe("v3 protocol conformance", () => {
 
     it("deepMerge() + matchOn emit deepMergeProps and dotted matchPropsOn", async () => {
       const app = buildApp();
-      app.get("/", (_req, res) => void res.inertia("Feed", { rows: deepMerge([{ id: 1 }], "id") }));
+      app.get("/", (_req, res) => void res.inertia("Feed", { rows: deepMerge([{ id: 1 }]).matchOn("id") }));
       const r = await request(app).get("/").set("x-inertia", "true");
       const body = JSON.parse(r.text);
       expect(body.deepMergeProps).toEqual(["rows"]);
       expect(body.matchPropsOn).toEqual(["rows.id"]);
       expect(body.mergeProps).toBeUndefined();
+    });
+
+    it("once() props are skipped when X-Inertia-Except-Once-Props names them and keep onceProps", async () => {
+      const app = buildApp();
+      app.get("/", (_req, res) => void res.inertia("X", { plans: once(() => ["a"]), b: 1 }));
+      const r = await request(app).get("/").set("x-inertia", "true").set("x-inertia-except-once-props", "plans");
+      const body = JSON.parse(r.text);
+      expect(body.props).toEqual({ b: 1 });
+      expect(body.onceProps).toEqual({ plans: { prop: "plans", expiresAt: null } });
     });
 
     it("X-Inertia-Reset drops a key from mergeProps but still sends the value", async () => {

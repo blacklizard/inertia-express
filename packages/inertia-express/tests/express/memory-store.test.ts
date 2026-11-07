@@ -14,6 +14,7 @@ function makeEntry(body: string): SsrCacheEntry {
       version: null,
       clearHistory: false,
       encryptHistory: false,
+      preserveFragment: false,
     },
   };
 }

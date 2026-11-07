@@ -9,6 +9,7 @@ function fakePage() {
     version: null,
     clearHistory: false,
     encryptHistory: false,
+    preserveFragment: false,
   };
 }
 
@@ -86,10 +87,10 @@ describe("createInertiaSsrFetcher", () => {
     // recordFailure, since 2 >= threshold).
     await fetcher({ page: fakePage(), ...fakeReqRes() });
     await fetcher({ page: fakePage(), ...fakeReqRes() });
-    const callsBefore = fetchImpl.mock.calls.length;
+    const callsBefore = vi.mocked(fetchImpl).mock.calls.length;
     // Next call should NOT call fetch — breaker is open.
     await fetcher({ page: fakePage(), ...fakeReqRes() });
-    expect(fetchImpl.mock.calls.length).toBe(callsBefore);
+    expect(vi.mocked(fetchImpl).mock.calls.length).toBe(callsBefore);
   });
 
   it("throws when breaker is open and fallback is 'throw'", async () => {
@@ -103,9 +104,9 @@ describe("createInertiaSsrFetcher", () => {
       fallback: "throw",
     });
     await expect(fetcher({ page: fakePage(), ...fakeReqRes() })).rejects.toThrow();
-    const callsBefore = fetchImpl.mock.calls.length;
+    const callsBefore = vi.mocked(fetchImpl).mock.calls.length;
     await expect(fetcher({ page: fakePage(), ...fakeReqRes() })).rejects.toThrow(/circuit breaker/);
-    expect(fetchImpl.mock.calls.length).toBe(callsBefore);
+    expect(vi.mocked(fetchImpl).mock.calls.length).toBe(callsBefore);
   });
 
   it("half-opens after cooldown so one probe can re-close it", async () => {
@@ -126,13 +127,13 @@ describe("createInertiaSsrFetcher", () => {
         breakerCooldownMs: 5_000,
       });
       await fetcher({ page: fakePage(), ...fakeReqRes() });
-      const tripped = fetchImpl.mock.calls.length;
+      const tripped = vi.mocked(fetchImpl).mock.calls.length;
       await fetcher({ page: fakePage(), ...fakeReqRes() });
-      expect(fetchImpl.mock.calls.length).toBe(tripped);
+      expect(vi.mocked(fetchImpl).mock.calls.length).toBe(tripped);
       vi.advanceTimersByTime(6_000);
       mode = "ok";
       const result = await fetcher({ page: fakePage(), ...fakeReqRes() });
-      expect(fetchImpl.mock.calls.length).toBe(tripped + 1);
+      expect(vi.mocked(fetchImpl).mock.calls.length).toBe(tripped + 1);
       expect(result?.body).toBe("back");
     } finally {
       vi.useRealTimers();
@@ -150,7 +151,7 @@ describe("createInertiaSsrFetcher", () => {
     for (let i = 0; i < 5; i++) {
       await fetcher({ page: fakePage(), ...fakeReqRes() });
     }
-    expect(fetchImpl.mock.calls.length).toBe(5);
+    expect(vi.mocked(fetchImpl).mock.calls.length).toBe(5);
   });
 
   it("returns empty result when SSR response body is malformed JSON", async () => {
@@ -166,7 +167,7 @@ describe("createInertiaSsrFetcher", () => {
     });
     const result = await fetcher({ page: fakePage(), ...fakeReqRes() });
     expect(result).toEqual({ body: "", head: "" });
-    expect(fetchImpl.mock.calls.length).toBe(2);
+    expect(vi.mocked(fetchImpl).mock.calls.length).toBe(2);
   });
 
   it("sends custom headers on every request", async () => {

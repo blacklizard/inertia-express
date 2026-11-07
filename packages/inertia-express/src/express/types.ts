@@ -159,13 +159,31 @@ export interface InertiaMiddlewareOptions {
    * `sharedProps` keys win on collision. Off by default.
    */
   flashFromSession?: boolean;
+
+  /**
+   * Called whenever a prop marked `.rescue()` throws during resolution. The
+   * failing prop is dropped from the page and its path is reported in
+   * `rescuedProps`; use this hook to log or report the swallowed error.
+   *
+   * @param error The thrown value.
+   * @param path Dotted path of the prop that failed.
+   * @param req The Express request being rendered.
+   */
+  onRescue?: (error: unknown, path: string, req: ExpressRequest) => void;
 }
 
 /**
  * Per-response options accepted as the third argument to `res.inertia()`.
- * Extends the core {@link RenderOptions} (clearHistory / encryptHistory).
+ * Extends the core {@link RenderOptions} (clearHistory / encryptHistory /
+ * preserveFragment).
  */
 export interface InertiaResponseOptions extends RenderOptions {
+  /**
+   * Instruct the client to keep the current URL fragment (`#hash`) across
+   * this visit. Defaults to `false`.
+   */
+  preserveFragment?: boolean;
+
   /**
    * Override the URL used in the page object. Defaults to `req.originalUrl`.
    */

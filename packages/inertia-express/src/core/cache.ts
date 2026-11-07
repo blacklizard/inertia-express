@@ -90,7 +90,7 @@ export interface ComputeCacheKeyInput {
   version: string | null;
   /** Component name being rendered. */
   component: string;
-  /** Final, fully-resolved props (post shared-merge, post-lazy evaluation). */
+  /** Final, fully-resolved props (post shared-merge, post closure and descriptor resolution). */
   props: PageProps;
   /** Optional extra discriminator (locale, theme, A/B bucket, etc.). */
   discriminator?: string;

@@ -1,4 +1,4 @@
-import type { InertiaPage, PageProps } from './types.js';
+import type { InertiaPage, PageProps, PropsMetadata } from './types.js';
 
 /**
  * Whether flash data is worth emitting as a top-level page key. Nullish and
@@ -20,8 +20,26 @@ function hasFlashData(flash: unknown): boolean {
 }
 
 /**
+ * Whether a metadata value carries anything worth emitting: a non-empty array
+ * or an object with at least one key.
+ *
+ * @param value Candidate metadata value from {@link PropsMetadata}.
+ */
+function hasMetadataEntries(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+
+  if (value !== null && typeof value === 'object') {
+    return Object.keys(value).length > 0;
+  }
+
+  return false;
+}
+
+/**
  * Inputs to {@link createPage} — the fields of an {@link InertiaPage} plus
- * optional history flags and v3 prop-key metadata.
+ * optional history flags and the v3 prop metadata produced by the resolver.
  */
 export interface CreatePageInput<TProps extends PageProps = PageProps> {
   component: string;
@@ -30,20 +48,18 @@ export interface CreatePageInput<TProps extends PageProps = PageProps> {
   version: string | null;
   clearHistory?: boolean;
   encryptHistory?: boolean;
-  deferredProps?: Record<string, string[]>;
-  mergeProps?: string[];
-  deepMergeProps?: string[];
-  matchPropsOn?: string[];
+  preserveFragment?: boolean;
+  metadata?: PropsMetadata;
   flash?: unknown;
 }
 
 /**
- * Build a normalized Inertia v3 page object. `clearHistory` and `encryptHistory`
- * default to `false`. Empty/absent `deferredProps` / `mergeProps` /
- * `deepMergeProps` / `matchPropsOn` are dropped so the JSON over the wire stays
- * compact. `flash` is emitted as a top-level key only when it carries data
- * (non-nullish, and a non-empty object when object-valued) — mirroring
- * inertia-laravel's `$flash ? ['flash' => $flash] : []`.
+ * Build a normalized Inertia v3 page object. `clearHistory`, `encryptHistory`
+ * and `preserveFragment` default to `false` and are always present. Each
+ * `metadata` key is copied onto the page only when non-empty so the JSON over
+ * the wire stays compact. `flash` is emitted as a top-level key only when it
+ * carries data (non-nullish, and a non-empty object when object-valued) —
+ * mirroring inertia-laravel's `$flash ? ['flash' => $flash] : []`.
  *
  * @param input Required page fields plus the optional v3 extras.
  */
@@ -55,22 +71,13 @@ export function createPage<TProps extends PageProps>(input: CreatePageInput<TPro
     version: input.version,
     clearHistory: input.clearHistory ?? false,
     encryptHistory: input.encryptHistory ?? false,
+    preserveFragment: input.preserveFragment ?? false,
   };
 
-  if (input.deferredProps && Object.keys(input.deferredProps).length > 0) {
-    page.deferredProps = input.deferredProps;
-  }
-
-  if (input.mergeProps && input.mergeProps.length > 0) {
-    page.mergeProps = input.mergeProps;
-  }
-
-  if (input.deepMergeProps && input.deepMergeProps.length > 0) {
-    page.deepMergeProps = input.deepMergeProps;
-  }
-
-  if (input.matchPropsOn && input.matchPropsOn.length > 0) {
-    page.matchPropsOn = input.matchPropsOn;
+  if (input.metadata) {
+    Object.assign(page, Object.fromEntries(
+      Object.entries(input.metadata).filter(([, value]) => hasMetadataEntries(value)),
+    ));
   }
 
   if (hasFlashData(input.flash)) {

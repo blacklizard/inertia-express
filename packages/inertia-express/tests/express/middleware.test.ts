@@ -1,7 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
-import { always, deepMerge, defer, inertia, lazy, merge, optional } from "../../src/express/index.js";
+import { always, deepMerge, defer, inertia, merge, optional, scroll } from "../../src/express/index.js";
 
 function buildApp(opts: Parameters<typeof inertia>[0] = {}) {
   const app = express();
@@ -54,10 +54,10 @@ describe("inertia middleware", () => {
     expect(body.props.override).toBe("page");
   });
 
-  it("evaluates lazy props", async () => {
+  it("evaluates bare closure props", async () => {
     const app = buildApp();
     app.get("/", (_req, res) => {
-      void res.inertia("X", { value: lazy(async () => 7) });
+      void res.inertia("X", { value: async () => 7 });
     });
     const r = await request(app).get("/").set("x-inertia", "true");
     const body = JSON.parse(r.text);
@@ -148,7 +148,7 @@ describe("inertia middleware", () => {
   it("emits deepMergeProps and matchPropsOn for a deepMerge() prop", async () => {
     const app = buildApp();
     app.get("/", (_req, res) => {
-      void res.inertia("Feed", { rows: deepMerge([{ id: 1 }], "id") });
+      void res.inertia("Feed", { rows: deepMerge([{ id: 1 }]).matchOn("id") });
     });
     const r = await request(app)
       .get("/")
@@ -175,6 +175,58 @@ describe("inertia middleware", () => {
     const body = JSON.parse(r.text);
     expect(body.mergeProps).toBeUndefined();
     expect(body.props.posts).toEqual([{ id: 1 }]);
+  });
+
+  it("reports a rescued defer prop through onRescue with the request and lists rescuedProps", async () => {
+    const seen: unknown[][] = [];
+    const app = buildApp({ onRescue: (error, path, req) => seen.push([error, path, req.path]) });
+    app.get("/", (_req, res) => {
+      void res.inertia("C", {
+        x: defer(async () => {
+          throw new Error("no");
+        }).rescue(),
+      });
+    });
+    const r = await request(app)
+      .get("/")
+      .set("x-inertia", "true")
+      .set("x-inertia-partial-component", "C")
+      .set("x-inertia-partial-data", "x");
+    expect(r.status).toBe(200);
+    const body = JSON.parse(r.text);
+    expect(body.rescuedProps).toEqual(["x"]);
+    expect(body.props.x).toBeUndefined();
+    expect(seen).toHaveLength(1);
+    expect(seen[0]![1]).toBe("x");
+    expect(seen[0]![2]).toBe("/");
+  });
+
+  it("emits preserveFragment when the response asks for it", async () => {
+    const app = buildApp();
+    app.get("/", (_req, res) => {
+      void res.inertia("C", {}, { preserveFragment: true });
+    });
+    const r = await request(app).get("/").set("x-inertia", "true");
+    const body = JSON.parse(r.text);
+    expect(body.preserveFragment).toBe(true);
+  });
+
+  it("emits nested merge paths and scroll metadata end to end", async () => {
+    const meta = { pageName: "page", previousPage: null, nextPage: 2, currentPage: 1 };
+    const app = buildApp();
+    app.get("/", (_req, res) => {
+      void res.inertia("Feed", { users: scroll(() => ({ data: [{ id: 1 }] }), { metadata: meta }) });
+    });
+    const r = await request(app)
+      .get("/")
+      .set("x-inertia", "true")
+      .set("x-inertia-partial-component", "Feed")
+      .set("x-inertia-partial-data", "users")
+      .set("x-inertia-infinite-scroll-merge-intent", "prepend");
+    const body = JSON.parse(r.text);
+    expect(body.prependProps).toEqual(["users.data"]);
+    expect(body.mergeProps).toBeUndefined();
+    expect(body.scrollProps).toEqual({ users: { ...meta, reset: false } });
   });
 
   it("returns 409 + X-Inertia-Location on version mismatch (GET)", async () => {

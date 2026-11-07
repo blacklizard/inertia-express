@@ -14,7 +14,7 @@ import { applyEdgeCache } from './edge-cache.js';
 import type { Request, Response } from 'express';
 
 import type {
-  InertiaPage, InertiaRequestInfo, PageProps, SharedPropsInput, SsrCacheEntry,
+  InertiaPage, InertiaRequestInfo, PageProps, RescueHandler, SharedPropsInput, SsrCacheEntry,
 } from '../core';
 import type {
   InertiaCacheOptions, InertiaMiddlewareOptions, InertiaResponseOptions, SsrResult,
@@ -61,6 +61,24 @@ function composeSharedProps(ctx: RenderContext, res: Response): SharedPropsInput
 
     return { errors, ...baseProps };
   };
+}
+
+/**
+ * Bind the middleware's request-aware `onRescue` option to the current
+ * request so the core resolver can call it with just `(error, path)`.
+ * Returns `undefined` when no handler is configured.
+ *
+ * @param ctx Render context carrying the middleware options.
+ * @param req Express request forwarded as the handler's third argument.
+ */
+function createRescueHandler(ctx: RenderContext, req: Request): RescueHandler | undefined {
+  const { onRescue } = ctx.options;
+
+  if (!onRescue) {
+    return undefined;
+  }
+
+  return (error, path) => onRescue(error, path, req);
 }
 
 /**
@@ -354,9 +372,11 @@ export async function sendInertiaResponse(
     shared: composeSharedProps(ctx, res),
     version,
     flash: resolveFlashData(ctx, req),
+    onRescue: createRescueHandler(ctx, req),
     options: {
       clearHistory: options.clearHistory,
       encryptHistory: options.encryptHistory,
+      preserveFragment: options.preserveFragment,
     },
   });
 

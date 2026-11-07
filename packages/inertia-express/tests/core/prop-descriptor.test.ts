@@ -153,7 +153,7 @@ describe("once descriptors", () => {
   });
 
   it("once(false) switches once off again", () => {
-    expect(d(once(() => 1).once(false)).resolvesOnce).toBe(false);
+    expect(d(once(() => 1)).once(false).resolvesOnce).toBe(false);
   });
 });
 

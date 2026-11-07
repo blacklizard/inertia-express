@@ -9,6 +9,7 @@ const page: InertiaPage = {
   version: null,
   clearHistory: false,
   encryptHistory: false,
+  preserveFragment: false,
 };
 
 describe("encodePageScript", () => {

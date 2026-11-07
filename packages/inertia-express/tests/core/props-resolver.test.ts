@@ -738,7 +738,7 @@ describe("scroll props", () => {
 
   it("nested scroll prop reset flag is set by reset header", async () => {
     const r = await page({ feed: { posts: posts() } }, makeRequest({ resetKeys: ["feed.posts"] }));
-    expect(r.metadata.scrollProps?.["feed.posts"].reset).toBe(true);
+    expect(r.metadata.scrollProps?.["feed.posts"]!.reset).toBe(true);
     expect(r.metadata.mergeProps).toBeUndefined();
   });
 });
@@ -793,8 +793,8 @@ describe("rescue", () => {
     expect(r.props).toEqual({ users: {} });
     expect(r.metadata.rescuedProps).toEqual(["users.list"]);
     expect(seen).toHaveLength(1);
-    expect(seen[0][1]).toBe("users.list");
-    expect((seen[0][0] as Error).message).toBe("x");
+    expect(seen[0]![1]).toBe("users.list");
+    expect((seen[0]![0] as Error).message).toBe("x");
   });
 
   it("a closure returning a rescued defer prop is omitted too", async () => {
@@ -825,17 +825,51 @@ describe("rescue", () => {
     expect(r.metadata).toEqual({ rescuedProps: ["posts"] });
   });
 
-  it("defaults onRescue to console.error", async () => {
+  it("defaults onRescue to console.error and names the path", async () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
-    await page(
-      {
-        a: defer(() => {
-          throw new Error("logged");
+    try {
+      await page(
+        {
+          a: defer(() => {
+            throw new Error("logged");
+          }).rescue(),
+        },
+        partial("a"),
+      );
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0]!.some((arg) => typeof arg === "string" && arg.includes("a"))).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("reports a non-Error throw as-is", async () => {
+    const seen: unknown[] = [];
+    const r = await resolveProps({
+      shared: {},
+      props: {
+        s: defer(() => {
+          throw "plain";
         }).rescue(),
+        u: defer(async () => Promise.reject(undefined)).rescue(),
       },
-      partial("a"),
+      component: COMPONENT,
+      request: partial("s,u"),
+      onRescue: (e) => seen.push(e),
+    });
+    expect(r.props).toEqual({});
+    expect(seen).toEqual(["plain", undefined]);
+    expect(r.metadata.rescuedProps).toEqual(["s", "u"]);
+  });
+
+  it("lists rescued paths in walk order across nesting", async () => {
+    const r = await page(
+      {
+        b: { y: defer(() => Promise.reject(new Error("1"))).rescue() },
+        a: defer(() => Promise.reject(new Error("2"))).rescue(),
+      },
+      partialRequest(COMPONENT, { only: ["b.y", "a"] }),
     );
-    expect(spy).toHaveBeenCalledTimes(1);
-    spy.mockRestore();
+    expect(r.metadata.rescuedProps).toEqual(["b.y", "a"]);
   });
 });
