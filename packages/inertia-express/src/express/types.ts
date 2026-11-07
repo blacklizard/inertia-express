@@ -164,6 +164,9 @@ export interface InertiaMiddlewareOptions {
    * Called whenever a prop marked `.rescue()` throws during resolution. The
    * failing prop is dropped from the page and its path is reported in
    * `rescuedProps`; use this hook to log or report the swallowed error.
+   * Failures of the hook itself are contained: a synchronous throw or a
+   * rejected returned promise is logged with `console.error` and never
+   * propagates or surfaces as an unhandled rejection.
    *
    * @param error The thrown value.
    * @param path Dotted path of the prop that failed.

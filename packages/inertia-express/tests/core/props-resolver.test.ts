@@ -873,3 +873,135 @@ describe("rescue", () => {
     expect(r.metadata.rescuedProps).toEqual(["b.y", "a"]);
   });
 });
+
+describe("descriptors are read-only during resolution", () => {
+  const meta = { pageName: "page", previousPage: null, nextPage: 2, currentPage: 1 };
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const snapshot = (p: unknown) => JSON.stringify({ ...(p as object) });
+
+  it("two concurrent requests on one scroll descriptor each get their own merge intent", async () => {
+    const users = scroll(async () => {
+      await sleep(20);
+      return { data: [1] };
+    }, { metadata: meta });
+    const [a, b] = await Promise.all([
+      page({ users }, makeRequest({ mergeIntent: "append" })),
+      page({ users }, makeRequest({ mergeIntent: "prepend" })),
+    ]);
+    expect(a.metadata.mergeProps).toEqual(["users.data"]);
+    expect(a.metadata.prependProps).toBeUndefined();
+    expect(b.metadata.prependProps).toEqual(["users.data"]);
+    expect(b.metadata.mergeProps).toBeUndefined();
+  });
+
+  it("a partial for a deferred scroll is not disturbed by a concurrent initial load", async () => {
+    const du = scroll(async () => {
+      await sleep(20);
+      return { data: [1] };
+    }, { metadata: meta }).defer();
+    const [partialResult, initial] = await Promise.all([
+      page({ du }, partial("du")),
+      sleep(5).then(() => page({ du })),
+    ]);
+    expect(partialResult.metadata.mergeProps).toEqual(["du.data"]);
+    expect(initial.metadata).toEqual({ mergeProps: ["du"], deferredProps: { default: ["du"] } });
+  });
+
+  it("leaves every descriptor field unchanged after resolve", async () => {
+    const s = scroll(() => ({ data: [] }), { metadata: meta }).matchOn("id");
+    const d = defer(() => 1).merge().append("x");
+    const o = once(() => 1).as("k");
+    const before = [snapshot(s), snapshot(d), snapshot(o)];
+    await page({ s, d, o }, makeRequest({ mergeIntent: "prepend" }));
+    await page({ s, d, o }, partial("s,d,o"));
+    expect([snapshot(s), snapshot(d), snapshot(o)]).toEqual(before);
+  });
+
+  it("resolves independent siblings concurrently while keeping insertion order", async () => {
+    const started: string[] = [];
+    const slow = (name: string) => async () => {
+      started.push(name);
+      await sleep(30);
+      return name;
+    };
+    const t0 = Date.now();
+    const r = await page({ b: slow("b"), a: slow("a"), c: slow("c") });
+    expect(Date.now() - t0).toBeLessThan(75);
+    expect(started).toEqual(["b", "a", "c"]);
+    expect(Object.keys(r.props)).toEqual(["b", "a", "c"]);
+  });
+
+  it("walks a 10k-row list well under a second", async () => {
+    const rows = Array.from({ length: 10_000 }, (_, i) => ({ id: i, name: `n${i}`, a: 1, b: 2, c: [i] }));
+    const t0 = Date.now();
+    const r = await page({ rows });
+    expect(Date.now() - t0).toBeLessThan(250);
+    expect((r.props.rows as unknown[]).length).toBe(10_000);
+  });
+});
+
+describe("onRescue containment", () => {
+  it("a throwing onRescue hook is logged and the prop is still rescued", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const r = await resolveProps({
+        shared: {},
+        props: {
+          a: defer(() => {
+            throw new Error("inner");
+          }).rescue(),
+          b: 1,
+        },
+        component: COMPONENT,
+        request: partial("a,b"),
+        onRescue: () => {
+          throw new Error("hook broke");
+        },
+      });
+      expect(r.props).toEqual({ b: 1 });
+      expect(r.metadata.rescuedProps).toEqual(["a"]);
+      expect(spy).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("a rejecting async onRescue hook is logged, not left unhandled", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const unhandled: unknown[] = [];
+    const listener = (e: unknown) => unhandled.push(e);
+    process.on("unhandledRejection", listener);
+    try {
+      const r = await resolveProps({
+        shared: {},
+        props: {
+          a: defer(() => {
+            throw new Error("inner");
+          }).rescue(),
+        },
+        component: COMPONENT,
+        request: partial("a"),
+        onRescue: (async () => {
+          throw new Error("async hook broke");
+        }) as unknown as () => void,
+      });
+      await new Promise((r) => setImmediate(r));
+      await new Promise((r) => setImmediate(r));
+      expect(r.metadata.rescuedProps).toEqual(["a"]);
+      expect(unhandled).toEqual([]);
+      expect(spy).toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", listener);
+      spy.mockRestore();
+    }
+  });
+});
+
+describe("metadata maps are own-key safe", () => {
+  it("accepts __proto__ as a defer group and a once key", async () => {
+    const r = await page({ a: defer(() => 1, "__proto__"), b: once(() => 2).as("__proto__") });
+    expect(Object.hasOwn(r.metadata.deferredProps ?? {}, "__proto__")).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(r.metadata.deferredProps, "__proto__")?.value).toEqual(["a"]);
+    expect(Object.getOwnPropertyDescriptor(r.metadata.onceProps, "__proto__")?.value).toEqual({ prop: "b", expiresAt: null });
+  });
+});

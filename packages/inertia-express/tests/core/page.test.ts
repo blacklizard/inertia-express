@@ -63,6 +63,17 @@ describe("createPage", () => {
     expect(createPage({ ...base, metadata: { scrollProps: { users: meta } } }).scrollProps).toEqual({ users: meta });
   });
 
+  it("copies only known metadata keys", () => {
+    const p = createPage({
+      ...base,
+      metadata: { mergeProps: ["a"], props: { hacked: true }, component: "Evil", url: "/evil" } as never,
+    });
+    expect(p.props).toEqual({ a: 1 });
+    expect(p.component).toBe("X");
+    expect(p.url).toBe("/x");
+    expect(p.mergeProps).toEqual(["a"]);
+  });
+
   it("forwards preserveFragment", () => {
     expect(createPage({ ...base, preserveFragment: true }).preserveFragment).toBe(true);
   });

@@ -20,6 +20,22 @@ function hasFlashData(flash: unknown): boolean {
 }
 
 /**
+ * Every {@link PropsMetadata} key, in protocol order. `createPage` copies only
+ * these keys, so a widened metadata object cannot overwrite page fields.
+ */
+const METADATA_KEYS = [
+  'sharedProps',
+  'mergeProps',
+  'prependProps',
+  'deepMergeProps',
+  'matchPropsOn',
+  'deferredProps',
+  'rescuedProps',
+  'scrollProps',
+  'onceProps',
+] as const satisfies readonly (keyof PropsMetadata)[];
+
+/**
  * Whether a metadata value carries anything worth emitting: a non-empty array
  * or an object with at least one key.
  *
@@ -74,10 +90,14 @@ export function createPage<TProps extends PageProps>(input: CreatePageInput<TPro
     preserveFragment: input.preserveFragment ?? false,
   };
 
-  if (input.metadata) {
-    Object.assign(page, Object.fromEntries(
-      Object.entries(input.metadata).filter(([, value]) => hasMetadataEntries(value)),
-    ));
+  const { metadata } = input;
+
+  if (metadata) {
+    METADATA_KEYS.forEach((key) => {
+      if (hasMetadataEntries(metadata[key])) {
+        Object.assign(page, { [key]: metadata[key] });
+      }
+    });
   }
 
   if (hasFlashData(input.flash)) {

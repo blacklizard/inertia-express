@@ -84,6 +84,20 @@ function assertCallable(name: string, fn: unknown): void {
 }
 
 /**
+ * Throw a `TypeError` when a merge constructor received extra arguments
+ * (the 2.x `merge(value, matchOn)` form), so migrating callers fail loudly
+ * instead of silently losing their dedupe key.
+ *
+ * @param name Constructor name, for the error message.
+ * @param extra Arguments passed after the value.
+ */
+function assertNoMatchOnArgument(name: string, extra: readonly unknown[]): void {
+  if (extra.length > 0) {
+    throw new TypeError(`${name}() takes a single argument; use ${name}(value).matchOn(...) to dedupe merged items.`);
+  }
+}
+
+/**
  * An optional prop: omitted from the first load, resolved when requested.
  *
  * @param fn Producer called (and awaited) when the prop is requested.
@@ -126,19 +140,29 @@ export function always<T>(value: PropSource<T>): AlwaysProp<T> {
 
 /**
  * A merge prop: the client appends it to its existing value at the root.
+ * Throws a `TypeError` when given a second argument (the 2.x `matchOn`
+ * form); chain `.matchOn()` instead.
  *
  * @param value Plain value or producer.
+ * @param extra Rejected; present only to catch the 2.x call form.
  */
-export function merge<T>(value: PropSource<T>): MergeProp<T> {
+export function merge<T>(value: PropSource<T>, ...extra: never[]): MergeProp<T> {
+  assertNoMatchOnArgument('merge', extra);
+
   return new PropDescriptor<T>('merge', value).merge();
 }
 
 /**
  * A deep-merge prop: the client recursively merges it into its existing value.
+ * Throws a `TypeError` when given a second argument (the 2.x `matchOn`
+ * form); chain `.matchOn()` instead.
  *
  * @param value Plain value or producer.
+ * @param extra Rejected; present only to catch the 2.x call form.
  */
-export function deepMerge<T>(value: PropSource<T>): MergeProp<T> {
+export function deepMerge<T>(value: PropSource<T>, ...extra: never[]): MergeProp<T> {
+  assertNoMatchOnArgument('deepMerge', extra);
+
   return new PropDescriptor<T>('merge', value).deepMerge();
 }
 

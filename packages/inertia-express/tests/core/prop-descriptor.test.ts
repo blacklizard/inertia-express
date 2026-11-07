@@ -201,6 +201,11 @@ describe("always and sources", () => {
     await expect(d(merge(() => [1])).resolveSource()).resolves.toEqual([1]);
   });
 
+  it("merge and deepMerge reject a second argument (2.x matchOn form)", () => {
+    expect(() => (merge as unknown as (v: unknown, m: string) => unknown)([1], "id")).toThrow(TypeError);
+    expect(() => (deepMerge as unknown as (v: unknown, m: string) => unknown)([1], "id")).toThrow(TypeError);
+  });
+
   it("callable-only constructors reject a non-function source", () => {
     expect(() => optional(1 as never)).toThrow(TypeError);
     expect(() => defer(1 as never)).toThrow(TypeError);

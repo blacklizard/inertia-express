@@ -76,6 +76,19 @@ function reportRescuedError(error: unknown, path: string): void {
 }
 
 /**
+ * Report a failure of a custom rescue hook through the default reporter:
+ * the original rescued error, then the hook's own error.
+ *
+ * @param hookError The value the hook threw or rejected with.
+ * @param error The rescued error the hook was given.
+ * @param path Dot path of the rescued prop.
+ */
+function reportHookFailure(hookError: unknown, error: unknown, path: string): void {
+  reportRescuedError(error, path);
+  console.error(`Inertia onRescue hook failed while reporting prop '${path}'.`, hookError);
+}
+
+/**
  * Marker returned by a settled entry that is left out of its parent node.
  */
 const EXCLUDED: unique symbol = Symbol('excluded');
@@ -195,7 +208,12 @@ interface MergeLayout {
 /**
  * Resolves shared and page props for one response, applying partial-reload
  * filtering and initial-load exclusion and collecting page metadata. Port of
- * inertia-laravel's `PropsResolver`.
+ * inertia-laravel's `PropsResolver`. Use one instance per response: the
+ * instance accumulates metadata, so {@link PropsResolver.resolve} throws when
+ * called a second time. The resolver only reads descriptors, never writes
+ * them. Metadata maps keyed by user input (`deferredProps`, `scrollProps`,
+ * `onceProps`) have a null prototype, so any key, `__proto__` included, is
+ * stored as an own property.
  */
 export default class PropsResolver {
   private readonly request: InertiaRequestInfo;
@@ -222,13 +240,15 @@ export default class PropsResolver {
 
   private readonly matchPropsOn: string[] = [];
 
-  private readonly deferredProps: Record<string, string[]> = {};
+  private readonly deferredProps = Object.create(null) as Record<string, string[]>;
 
   private readonly rescuedProps: string[] = [];
 
-  private readonly scrollProps: Record<string, ScrollMetadata & { reset: boolean }> = {};
+  private readonly scrollProps = Object.create(null) as Record<string, ScrollMetadata & { reset: boolean }>;
 
-  private readonly onceProps: Record<string, OnceMetadata> = {};
+  private readonly onceProps = Object.create(null) as Record<string, OnceMetadata>;
+
+  private used = false;
 
   /**
    * Create a resolver for one request and component.
@@ -254,6 +274,11 @@ export default class PropsResolver {
    * @param props Page props; these win over shared props on collision.
    */
   async resolve(shared: PageProps, props: PageProps): Promise<ResolvePropsResult> {
+    if (this.used) {
+      throw new Error('PropsResolver.resolve() was already called on this instance; create one resolver per response.');
+    }
+
+    this.used = true;
     const combined = { ...this.resolveSharedProps(shared), ...props };
     const resolved = await this.walk(await unpackDotProps(combined), '', false);
 
@@ -681,10 +706,32 @@ export default class PropsResolver {
    * @param path Dot path of the prop.
    */
   private rescue(error: unknown, path: string): typeof EXCLUDED {
-    this.onRescue(error, path);
+    this.reportRescue(error, path);
     this.rescuedProps.push(path);
 
     return EXCLUDED;
+  }
+
+  /**
+   * Call the rescue hook with the failure contained: a synchronous throw or
+   * a rejected returned thenable is logged through the default reporter and
+   * never propagates or surfaces as an unhandled rejection.
+   *
+   * @param error The thrown value.
+   * @param path Dot path of the prop.
+   */
+  private reportRescue(error: unknown, path: string): void {
+    const hook: (error: unknown, path: string) => unknown = this.onRescue;
+
+    try {
+      const result = hook(error, path);
+
+      if (result !== null && typeof result === 'object' && typeof (result as { then?: unknown }).then === 'function') {
+        Promise.resolve(result).catch((hookError: unknown) => reportHookFailure(hookError, error, path));
+      }
+    } catch (hookError) {
+      reportHookFailure(hookError, error, path);
+    }
   }
 
   /**

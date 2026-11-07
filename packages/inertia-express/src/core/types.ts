@@ -119,7 +119,10 @@ export interface PropsMetadata {
 }
 
 /**
- * Callback invoked when a rescued prop throws during resolution.
+ * Callback invoked when a rescued prop throws during resolution. The hook's
+ * own failures are contained: a synchronous throw or a rejected returned
+ * promise is logged through the default reporter (`console.error`) and never
+ * propagates or surfaces as an unhandled rejection.
  *
  * @param error The thrown value.
  * @param path Dotted path of the prop that failed.
