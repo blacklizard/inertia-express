@@ -279,6 +279,17 @@ the client keep the current URL `#fragment` across that visit.
 | `resolveProps()` → `{ props, deferred, merge, deepMerge, matchOn }` | `{ props, metadata }` |
 | Types `MergeProp<T> = T & {...}` | descriptor types; the page `props` type is unchanged |
 
+Other changes to check when upgrading:
+
+- `merge(value, "id")` and `deepMerge(value, "id")` now throw a `TypeError` instead of silently ignoring the second argument. Use `.matchOn("id")`.
+- Partial reloads follow dotted paths. `except: users.data` now drops only `users.data` and keeps the rest of `users`. `only: users.data` on a plain-object `users` now returns just `{ users: { data } }`; children of a closure or descriptor still bypass filtering and come back whole. The upstream reference Node server used by the conformance suite applies `except` to the whole top-level key instead, so the two differ here (see conformance/HOW-IT-WORKS.md §9).
+- Types: `DeferredProp` is renamed to `DeferProp`. `LazyProp`, `DeepMergeProp` and `PropValue` are removed. `MergeProp<T>` is now the descriptor interface returned by `merge()` / `deepMerge()`, not `T & {...}`.
+- Core-entry adapter authors who build these objects by hand: `InertiaPage.preserveFragment` is now required, and `InertiaRequestInfo` gains the required fields `exceptOnceProps` and `mergeIntent`.
+- `sharedProps` (the list of shared top-level keys) is now emitted on every page that has shared props.
+- Descriptors are builders. Create them inside the handler for each request rather than mutating one hoisted to module level; the resolver itself only reads them, so a hoisted descriptor that is never changed after creation is safe to reuse.
+- Sibling props still resolve concurrently, as in 2.x, and the output key order and metadata order are deterministic (insertion order).
+- Errors thrown by the `onRescue` hook (or a rejected promise it returns) are logged with `console.error` and never propagated.
+
 ## Partial reloads
 
 When the client requests a partial reload, it sends:
