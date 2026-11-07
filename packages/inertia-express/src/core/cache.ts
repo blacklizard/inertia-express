@@ -29,8 +29,10 @@ export interface SsrCacheEntry {
   /** ISO timestamp when this entry was stored. Useful for debugging. */
   storedAt: string;
   /**
-   * The page object the entry corresponds to. Lets a custom rootView see
-   * the same structure on a cache hit as on a fresh render.
+   * The page object the entry was rendered from, kept for inspection and
+   * invalidation tooling. A cache hit renders the page resolved for the
+   * current request, not this one, so per-request fields such as `url` and
+   * once-prop expiry stay current.
    */
   page: InertiaPage;
 }

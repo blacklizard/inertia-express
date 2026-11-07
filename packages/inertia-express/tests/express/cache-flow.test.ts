@@ -1,7 +1,18 @@
 import express from "express";
 import request from "supertest";
-import { describe, expect, it, vi } from "vitest";
-import { createMemoryCacheStore, inertia } from "../../src/express/index.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createMemoryCacheStore, inertia, once } from "../../src/express/index.js";
+
+const pageFromHtml = (html: string): Record<string, unknown> => {
+  const json = /<script data-page="app" type="application\/json">(.*?)<\/script>/s.exec(html)?.[1];
+  if (json === undefined) {
+    throw new Error("no page script in response");
+  }
+  return JSON.parse(json) as Record<string, unknown>;
+};
+
+const onceExpiry = (html: string): number | undefined =>
+  (pageFromHtml(html).onceProps as Record<string, { expiresAt: number }>).plans?.expiresAt;
 
 describe("middleware view cache", () => {
   it("caches HTML and serves a HIT on the second visit", async () => {
@@ -151,5 +162,79 @@ describe("middleware view cache", () => {
     expect(r.status).toBe(200);
     // get + set both errored => at least 2 calls
     expect(onError.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  describe("cache hits render the live page", () => {
+    const T0 = Date.UTC(2026, 10, 7, 12, 0, 0);
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("refreshes once-prop expiry in the default root view on a HIT", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(T0);
+      const ssr = vi.fn(async () => ({ body: "<p>x</p>", head: "" }));
+      const app = express();
+      app.use(inertia({ version: "v1", ssr, cache: { store: createMemoryCacheStore(), ttlSeconds: 600 } }));
+      app.get("/", (_req, res) => {
+        void res.inertia("Plans", { plans: once(() => ["a"]).as("plans").until(60) });
+      });
+
+      const r1 = await request(app).get("/");
+      expect(r1.headers["x-inertia-cache"]).toBe("MISS");
+      expect(onceExpiry(r1.text)).toBe(T0 + 60_000);
+
+      vi.setSystemTime(T0 + 10_000);
+      const r2 = await request(app).get("/");
+      expect(r2.headers["x-inertia-cache"]).toBe("HIT");
+      expect(ssr).toHaveBeenCalledTimes(1);
+      expect(onceExpiry(r2.text)).toBe(T0 + 70_000);
+    });
+
+    it("rewrites the page script embedded in a full-root SSR body on a HIT", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(T0);
+      const ssr = vi.fn(async ({ page }) => ({
+        bodyIsFullRoot: true,
+        body: `<script data-page="app" type="application/json">${JSON.stringify(page).replace(/</g, "\\u003C")}</script><div id="app"><p>${page.component}</p></div>`,
+        head: ["<title>t</title>"],
+      }));
+      const app = express();
+      app.use(inertia({ version: "v1", ssr, cache: { store: createMemoryCacheStore(), ttlSeconds: 600 } }));
+      app.get("/", (_req, res) => {
+        void res.inertia("Plans", { plans: once(() => ["<a>"]).as("plans").until(60) });
+      });
+
+      const r1 = await request(app).get("/");
+      expect(r1.headers["x-inertia-cache"]).toBe("MISS");
+      expect(onceExpiry(r1.text)).toBe(T0 + 60_000);
+
+      vi.setSystemTime(T0 + 10_000);
+      const r2 = await request(app).get("/");
+      expect(r2.headers["x-inertia-cache"]).toBe("HIT");
+      expect(ssr).toHaveBeenCalledTimes(1);
+      expect(onceExpiry(r2.text)).toBe(T0 + 70_000);
+      expect(r2.text).toContain('<div id="app"><p>Plans</p></div>');
+      expect(r2.text).not.toContain("<a>");
+      expect((pageFromHtml(r2.text).props as { plans: string[] }).plans).toEqual(["<a>"]);
+    });
+
+    it("serves the live url when two routes share a cache entry", async () => {
+      const ssr = vi.fn(async () => ({ body: "<p>x</p>", head: "" }));
+      const app = express();
+      app.use(inertia({ version: "v1", ssr, cache: { store: createMemoryCacheStore(), ttlSeconds: 600 } }));
+      const handler = (_req: express.Request, res: express.Response): void => {
+        void res.inertia("Static", { a: 1 });
+      };
+      app.get("/one", handler);
+      app.get("/two", handler);
+
+      const r1 = await request(app).get("/one");
+      expect(r1.headers["x-inertia-cache"]).toBe("MISS");
+      const r2 = await request(app).get("/two");
+      expect(r2.headers["x-inertia-cache"]).toBe("HIT");
+      expect(pageFromHtml(r2.text).url).toBe("/two");
+    });
   });
 });

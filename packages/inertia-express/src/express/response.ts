@@ -265,6 +265,22 @@ async function safeCacheSet(cache: InertiaCacheOptions, key: string, entry: SsrC
   }
 }
 
+const PAGE_SCRIPT_PATTERN = /(<script\b[^>]*\bdata-page=(?:"[^"]*"|'[^']*')[^>]*>)[\s\S]*?(<\/script>)/;
+
+/**
+ * Replace the page JSON embedded in a cached full-root SSR body with the
+ * page resolved for the current request. The cache key fixes the props, so
+ * the markup still matches; only per-request fields (`url`, `onceProps`
+ * expiry) differ, and the client must read those from the live page. A body
+ * without a page script is returned unchanged.
+ *
+ * @param body Cached full-root SSR body.
+ * @param page Page object resolved for the current request.
+ */
+function refreshEmbeddedPageScript(body: string, page: InertiaPage): string {
+  return body.replace(PAGE_SCRIPT_PATTERN, (_match, open: string, close: string) => `${open}${encodePageScript(page)}${close}`);
+}
+
 /**
  * Render the final HTML body. When an SSR result is available, expose it via
  * `res.locals.ssr` so a custom `rootView` can read it, then either call
@@ -412,16 +428,16 @@ export async function sendInertiaResponse(
       res.setHeader('X-Inertia-Cache', 'HIT');
       const html = await renderRootViewWithSsr(
         ctx,
-        hit.page,
+        page,
         {
           head: hit.head,
-          body: hit.body,
+          body: hit.bodyIsFullRoot ? refreshEmbeddedPageScript(hit.body, page) : hit.body,
           bodyIsFullRoot: hit.bodyIsFullRoot,
         },
         req,
         res,
       );
-      maybeApplyEdgeCache(ctx, hit.page, req, res);
+      maybeApplyEdgeCache(ctx, page, req, res);
       res.status(res.statusCode).setHeader('Content-Type', 'text/html; charset=utf-8').send(html);
 
       return;

@@ -13,6 +13,7 @@ Migrating from 2.x:
 - `resolveProps()` now returns `{ props, metadata }` instead of `{ props, deferred, merge, deepMerge, matchOn }`.
 - The `MergeProp<T> = T & {...}` types are replaced by descriptor types; the page `props` type is unchanged.
 - `merge(value, "id")` and `deepMerge(value, "id")` now throw a `TypeError` instead of silently ignoring the second argument. Use `.matchOn("id")`.
+- View-cache hits render the page resolved for the current request and refresh the page script embedded in a cached full-root SSR body, so `url` and `onceProps` expiry are never served stale from the cache.
 - Partial reloads follow dotted paths. `only: users.data` on a plain-object `users` now returns just `{ users: { data } }`; children of a closure or descriptor still bypass filtering and come back whole. `except: users.data` drops the whole top-level `users`, as in 2.x and in the upstream reference server; inertia-laravel keeps `users` and drops only the child, and the adapter deliberately differs from it here.
 - Types: `DeferredProp` is renamed to `DeferProp`. `LazyProp`, `DeepMergeProp` and `PropValue` are removed. `MergeProp<T>` is now the descriptor interface returned by `merge()` / `deepMerge()`, not `T & {...}`.
 - Core-entry adapter authors who build these objects by hand: `InertiaPage.preserveFragment` is now required, and `InertiaRequestInfo` gains the required fields `exceptOnceProps` and `mergeIntent`.
