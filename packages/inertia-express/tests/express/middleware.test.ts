@@ -898,7 +898,9 @@ describe("req.flash (connect-flash compat)", () => {
     expect(JSON.parse(r.text).flash).toEqual({ success: ["Saved!"] });
     expect(session.flash).toBeUndefined();
   });
+});
 
+describe("empty response redirect back", () => {
   it("no response value by default means automatically redirecting back for inertia requests", async () => {
     const app = buildApp();
     let called = false;
@@ -970,5 +972,22 @@ describe("req.flash (connect-flash compat)", () => {
     const r = await request(app).put("/").set("x-inertia", "true").set("referer", "/foo");
     expect(r.status).toBe(303);
     expect(finished).toBe(true);
+  });
+
+  it("res.end('', callback) is empty, redirects back and still invokes the callback", async () => {
+    const app = buildApp();
+    let finished = false;
+    app.put("/", (_req, res) => { res.end("", () => { finished = true; }); });
+    const r = await request(app).put("/").set("x-inertia", "true").set("referer", "/foo");
+    expect(r.status).toBe(303);
+    expect(finished).toBe(true);
+  });
+
+  it("a HEAD request to an Inertia page is not treated as an empty response", async () => {
+    const app = buildApp();
+    app.get("/", (_req, res) => { void res.inertia("Home", { a: 1 }); });
+    const r = await request(app).head("/").set("x-inertia", "true").set("referer", "/elsewhere");
+    expect(r.status).toBe(200);
+    expect(r.headers.location).toBeUndefined();
   });
 });

@@ -23,7 +23,8 @@ function isEmptyChunk(chunk: unknown): boolean {
  * PUT/PATCH/DELETE/QUERY.
  *
  * Limitation: the guard is not observed when headers were already sent
- * (`res.flushHeaders()`, streaming) or when the handler never responds.
+ * (`res.flushHeaders()`, streaming), when the handler never responds, or for
+ * HEAD requests (Express ends those without a body by design).
  *
  * @param req The Express request; supplies the `Referer` header.
  * @param res The Express response whose `write` and `end` are wrapped.
@@ -32,6 +33,7 @@ export default function installEmptyResponseGuard(req: Request, res: Response): 
   const originalWrite = res.write;
   const originalEnd = res.end;
   let written = false;
+  let bypass = false;
 
   res.write = function write(this: Response, ...args: unknown[]) {
     written = true;
@@ -40,12 +42,21 @@ export default function installEmptyResponseGuard(req: Request, res: Response): 
   } as typeof res.write;
 
   res.end = function end(this: Response, chunk?: unknown, ...rest: unknown[]) {
-    if (res.statusCode === 200 && !res.headersSent && !written && isEmptyChunk(chunk)) {
-      // Express's redirect ends the response through `res.end`.
-      res.end = originalEnd;
+    if (
+      !bypass
+      && req.method !== 'HEAD'
+      && res.statusCode === 200
+      && !res.headersSent
+      && !written
+      && isEmptyChunk(chunk)
+    ) {
+      // Express's redirect ends the response through `res.end`; let it pass.
+      bypass = true;
 
-      if (typeof chunk === 'function') {
-        res.once('finish', chunk as () => void);
+      const callback = [chunk, ...rest].reverse().find((arg) => typeof arg === 'function');
+
+      if (callback) {
+        res.once('finish', callback as () => void);
       }
 
       res.redirect(302, req.get('Referer') ?? '/');
