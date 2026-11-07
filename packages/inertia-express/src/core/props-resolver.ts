@@ -76,13 +76,14 @@ function reportRescuedError(error: unknown, path: string): void {
 }
 
 /**
- * Clear a descriptor's append and prepend paths left over from an earlier request.
- *
- * @param prop The descriptor to clear.
+ * Where a mergeable prop merges for one request: at its root (appending or
+ * prepending) or at the listed child paths.
  */
-function clearMergePaths(prop: PropDescriptor): void {
-  prop.appendPaths.splice(0);
-  prop.prependPaths.splice(0);
+interface MergeLayout {
+  appendsAtRoot: boolean;
+  prependsAtRoot: boolean;
+  appendPaths: readonly string[];
+  prependPaths: readonly string[];
 }
 
 /**
@@ -369,7 +370,7 @@ export default class PropsResolver {
     }
 
     if (prop.merges) {
-      this.collectMergeableMetadata(path, prop);
+      this.collectMergeableMetadata(path, prop, true);
     }
 
     if (prop.resolvesOnce) {
@@ -388,12 +389,8 @@ export default class PropsResolver {
   private excludeDeferredProp(prop: PropDescriptor, path: string): boolean {
     this.collectDeferredPropMetadata(path, prop);
 
-    if (prop.isScroll) {
-      clearMergePaths(prop);
-    }
-
     if (prop.merges) {
-      this.collectMergeableMetadata(path, prop);
+      this.collectMergeableMetadata(path, prop, true);
     }
 
     return true;
@@ -428,16 +425,11 @@ export default class PropsResolver {
   /**
    * Resolve a single prop value: a descriptor resolves its source, a bare
    * function is called, and the result is awaited; anything else passes through.
-   * A scroll descriptor first has its merge intent configured from the request.
    *
    * @param prop The prop to resolve.
    * @param path Dot path of the prop.
    */
   private async resolveValue(prop: unknown, path: string): Promise<unknown> {
-    if (isPropDescriptor(prop) && prop.isScroll) {
-      this.configureMergeIntent(prop);
-    }
-
     try {
       if (isPropDescriptor(prop)) {
         return await prop.resolveSource();
@@ -450,24 +442,6 @@ export default class PropsResolver {
       return prop;
     } catch (error) {
       return this.rescue(error, prop, path);
-    }
-  }
-
-  /**
-   * Point a scroll descriptor's merge at its wrapper key, prepending when the
-   * client's merge intent is `prepend` and appending otherwise. Paths from an
-   * earlier request are cleared first so a reused descriptor is reconfigured.
-   * Port of `ScrollProp::configureMergeIntent`.
-   *
-   * @param prop The scroll descriptor.
-   */
-  private configureMergeIntent(prop: PropDescriptor): void {
-    clearMergePaths(prop);
-
-    if (this.request.mergeIntent === 'prepend') {
-      prop.prepend(prop.wrapper);
-    } else {
-      prop.append(prop.wrapper);
     }
   }
 
@@ -535,7 +509,7 @@ export default class PropsResolver {
     }
 
     if (prop.merges) {
-      this.collectMergeableMetadata(path, prop);
+      this.collectMergeableMetadata(path, prop, false);
     }
 
     if (prop.isScroll) {
@@ -565,8 +539,9 @@ export default class PropsResolver {
    *
    * @param path Dot path of the prop.
    * @param prop The mergeable descriptor.
+   * @param excluded Whether the prop is being excluded from this response rather than resolved.
    */
-  private collectMergeableMetadata(path: string, prop: PropDescriptor): void {
+  private collectMergeableMetadata(path: string, prop: PropDescriptor, excluded: boolean): void {
     if (this.request.resetKeys?.includes(path)) {
       return;
     }
@@ -575,18 +550,51 @@ export default class PropsResolver {
       return;
     }
 
+    const layout = this.mergeLayoutFor(prop, excluded);
+
     if (prop.deep) {
       this.deepMergeProps.push(path);
-    } else if (prop.appendsAtRoot) {
+    } else if (layout.appendsAtRoot) {
       this.mergeProps.push(path);
-    } else if (prop.prependsAtRoot) {
+    } else if (layout.prependsAtRoot) {
       this.prependProps.push(path);
     } else {
-      this.mergeProps.push(...prop.appendPaths.map((appendPath) => `${path}.${appendPath}`));
-      this.prependProps.push(...prop.prependPaths.map((prependPath) => `${path}.${prependPath}`));
+      this.mergeProps.push(...layout.appendPaths.map((appendPath) => `${path}.${appendPath}`));
+      this.prependProps.push(...layout.prependPaths.map((prependPath) => `${path}.${prependPath}`));
     }
 
     this.matchPropsOn.push(...prop.matchOnPaths.map((matchOn) => `${path}.${matchOn}`));
+  }
+
+  /**
+   * The merge layout of a descriptor for this request, read without writing
+   * to the descriptor. A scroll descriptor derives its layout per request:
+   * a root append while it is excluded as deferred, otherwise its wrapper key
+   * appended or prepended according to the client's merge intent (the
+   * read-only equivalent of `ScrollProp::configureMergeIntent`).
+   *
+   * @param prop The mergeable descriptor.
+   * @param excluded Whether the prop is being excluded from this response rather than resolved.
+   */
+  private mergeLayoutFor(prop: PropDescriptor, excluded: boolean): MergeLayout {
+    if (!prop.isScroll) {
+      return prop;
+    }
+
+    if (excluded) {
+      return {
+        appendsAtRoot: true, prependsAtRoot: false, appendPaths: [], prependPaths: [],
+      };
+    }
+
+    const prepends = this.request.mergeIntent === 'prepend';
+
+    return {
+      appendsAtRoot: false,
+      prependsAtRoot: false,
+      appendPaths: prepends ? [] : [prop.wrapper],
+      prependPaths: prepends ? [prop.wrapper] : [],
+    };
   }
 
   /**
