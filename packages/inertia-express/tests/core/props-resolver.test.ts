@@ -13,7 +13,7 @@
  * - test_recorder_is_*_while_resolving_props_* (2 cases): devtools recorder is a non-goal.
  * - test_arrays_matching_callable_syntax_are_not_invoked: PHP callable-array syntax has no JS equivalent.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import PropDescriptor from "../../src/core/prop-descriptor.js";
 import { resolveProps } from "../../src/core/props-resolver.js";
 import { always, defer, merge, once, optional, scroll } from "../../src/core/props.js";
@@ -740,5 +740,102 @@ describe("scroll props", () => {
     const r = await page({ feed: { posts: posts() } }, makeRequest({ resetKeys: ["feed.posts"] }));
     expect(r.metadata.scrollProps?.["feed.posts"].reset).toBe(true);
     expect(r.metadata.mergeProps).toBeUndefined();
+  });
+});
+
+describe("rescue", () => {
+  it("rescued defer prop is omitted and metadata on partial request", async () => {
+    const r = await page(
+      {
+        auth: {
+          notifications: defer(() => {
+            throw new Error("Rescue this deferred prop");
+          }).rescue(),
+        },
+      },
+      partial("auth.notifications"),
+    );
+    expect(r.props).toEqual({ auth: {} });
+    expect(r.metadata.rescuedProps).toEqual(["auth.notifications"]);
+  });
+
+  it("propagates an error from a prop without rescue", async () => {
+    const boom = new Error("db down");
+    await expect(
+      page({
+        a: () => {
+          throw boom;
+        },
+      }),
+    ).rejects.toBe(boom);
+  });
+
+  it("propagates a rejection from an unrescued defer on a partial", async () => {
+    const boom = new Error("async down");
+    await expect(page({ a: defer(async () => Promise.reject(boom)) }, partial("a"))).rejects.toBe(boom);
+  });
+
+  it("reports a rescued error with the path and omits the prop", async () => {
+    const seen: [unknown, string][] = [];
+    const r = await resolveProps({
+      shared: {},
+      props: {
+        users: {
+          list: defer(async () => {
+            throw new Error("x");
+          }).rescue(),
+        },
+      },
+      component: COMPONENT,
+      request: partial("users.list"),
+      onRescue: (e, p) => seen.push([e, p]),
+    });
+    expect(r.props).toEqual({ users: {} });
+    expect(r.metadata.rescuedProps).toEqual(["users.list"]);
+    expect(seen).toHaveLength(1);
+    expect(seen[0][1]).toBe("users.list");
+    expect((seen[0][0] as Error).message).toBe("x");
+  });
+
+  it("a closure returning a rescued defer prop is omitted too", async () => {
+    const r = await page(
+      {
+        stats: () =>
+          defer(() => {
+            throw new Error("Failed to resolve stats");
+          }).rescue(),
+      },
+      partial("stats"),
+    );
+    expect(r.props).toEqual({});
+    expect(r.metadata.rescuedProps).toEqual(["stats"]);
+  });
+
+  it("rescue does not emit merge metadata for the omitted prop", async () => {
+    const r = await page(
+      {
+        posts: defer(() => {
+          throw new Error("no");
+        })
+          .merge()
+          .rescue(),
+      },
+      partial("posts"),
+    );
+    expect(r.metadata).toEqual({ rescuedProps: ["posts"] });
+  });
+
+  it("defaults onRescue to console.error", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await page(
+      {
+        a: defer(() => {
+          throw new Error("logged");
+        }).rescue(),
+      },
+      partial("a"),
+    );
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
   });
 });

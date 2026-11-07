@@ -96,6 +96,20 @@ describe("ScrollProp", () => {
     expect(r.metadata.deferredProps).toBeUndefined();
   });
 
+  it("a reused deferred scroll descriptor emits root merge metadata on a later initial load", async () => {
+    const p = scroll(() => users, { metadata: meta }).defer();
+    await page({ users: p }, partialRequest("Users/Index", { only: ["users"] }));
+    const r = await page({ users: p });
+    expect(r.metadata).toEqual({ mergeProps: ["users"], deferredProps: { default: ["users"] } });
+  });
+
+  it("a closure returning a scroll descriptor is configured and shape-checked", async () => {
+    const r = await page({ users: () => scroll(() => users, { metadata: meta }) }, makeRequest({ mergeIntent: "prepend" }));
+    expect(r.metadata.prependProps).toEqual(["users.data"]);
+    expect(r.metadata.scrollProps).toEqual({ users: { ...meta, reset: false } });
+    await expect(page({ users: () => scroll(() => ({ nope: 1 }), { metadata: meta }) })).rejects.toThrow(TypeError);
+  });
+
   it("deferred scroll prop can have custom group", async () => {
     const r = await page({ users: scroll(() => users, { metadata: meta }).defer("custom-group") });
     expect(r.props).toEqual({});

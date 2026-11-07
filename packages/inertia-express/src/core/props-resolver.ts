@@ -66,6 +66,26 @@ function normalizeList(list: string[] | null): string[] | null {
 }
 
 /**
+ * Default rescue hook: log the rescued error with the prop's path.
+ *
+ * @param error The thrown value.
+ * @param path Dot path of the rescued prop.
+ */
+function reportRescuedError(error: unknown, path: string): void {
+  console.error(`Inertia prop '${path}' failed to resolve and was rescued.`, error);
+}
+
+/**
+ * Clear a descriptor's append and prepend paths left over from an earlier request.
+ *
+ * @param prop The descriptor to clear.
+ */
+function clearMergePaths(prop: PropDescriptor): void {
+  prop.appendPaths.splice(0);
+  prop.prependPaths.splice(0);
+}
+
+/**
  * Resolves shared and page props for one response, applying partial-reload
  * filtering and initial-load exclusion and collecting page metadata. Port of
  * inertia-laravel's `PropsResolver`.
@@ -75,7 +95,7 @@ export default class PropsResolver {
 
   private readonly component: string;
 
-  private readonly onRescue: RescueHandler | undefined;
+  private readonly onRescue: RescueHandler;
 
   private readonly isPartial: boolean;
 
@@ -113,7 +133,7 @@ export default class PropsResolver {
   constructor(request: InertiaRequestInfo, component: string, onRescue?: RescueHandler) {
     this.request = request;
     this.component = component;
-    this.onRescue = onRescue;
+    this.onRescue = onRescue ?? reportRescuedError;
     this.isPartial = request.partialComponent === component;
     this.isInertia = request.isInertia;
     this.only = normalizeList(request.partialOnly);
@@ -244,6 +264,10 @@ export default class PropsResolver {
       }
 
       value = await this.resolveValue(current, path);
+
+      if (this.rescuedProps.includes(path)) {
+        return { included: false };
+      }
     }
 
     this.assertScrollShape(current, path, value);
@@ -364,6 +388,10 @@ export default class PropsResolver {
   private excludeDeferredProp(prop: PropDescriptor, path: string): boolean {
     this.collectDeferredPropMetadata(path, prop);
 
+    if (prop.isScroll) {
+      clearMergePaths(prop);
+    }
+
     if (prop.merges) {
       this.collectMergeableMetadata(path, prop);
     }
@@ -434,8 +462,7 @@ export default class PropsResolver {
    * @param prop The scroll descriptor.
    */
   private configureMergeIntent(prop: PropDescriptor): void {
-    prop.appendPaths.splice(0);
-    prop.prependPaths.splice(0);
+    clearMergePaths(prop);
 
     if (this.request.mergeIntent === 'prepend') {
       prop.prepend(prop.wrapper);
@@ -464,16 +491,23 @@ export default class PropsResolver {
   }
 
   /**
-   * Handle an error thrown while resolving a prop. Stub: rethrows; Task 8
-   * adds rescue reporting and `rescuedProps` bookkeeping.
+   * Handle an error thrown while resolving a prop. A rescuable descriptor
+   * reports the error, records its path in `rescuedProps` and resolves to
+   * `null` so the walk omits it; any other prop rethrows the original error.
    *
    * @param error The thrown value.
-   * @param _prop The prop that threw.
-   * @param _path Dot path of the prop.
+   * @param prop The prop that threw.
+   * @param path Dot path of the prop.
    */
-  // eslint-disable-next-line class-methods-use-this
-  private rescue(error: unknown, _prop: unknown, _path: string): never {
-    throw error;
+  private rescue(error: unknown, prop: unknown, path: string): null {
+    if (!isPropDescriptor(prop) || !prop.rescues) {
+      throw error;
+    }
+
+    this.onRescue(error, path);
+    this.rescuedProps.push(path);
+
+    return null;
   }
 
   /**
