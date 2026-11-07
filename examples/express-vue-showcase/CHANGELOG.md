@@ -1,5 +1,12 @@
 # example-express-vue-showcase
 
+## 1.0.5
+
+### Patch Changes
+
+- Updated dependencies [255c323]
+  - @blacklizard/inertia-express@3.0.0
+
 ## 1.0.4
 
 ### Patch Changes
