@@ -69,6 +69,18 @@ describe("merge descriptors", () => {
     expect(d(merge({}).matchOn(["id", "slug"])).matchOnPaths).toEqual(["id", "slug"]);
   });
 
+  it("matchOn replaces paths that append/prepend accumulated", () => {
+    expect(d(merge({}).append("data", "id").matchOn("slug")).matchOnPaths).toEqual(["slug"]);
+    expect(d(merge({}).matchOn("a").prepend("x", "k")).matchOnPaths).toEqual(["a", "x.k"]);
+  });
+
+  it("prepend with a list or a record records every path", () => {
+    expect(d(merge({}).prepend(["a", "b"])).prependPaths).toEqual(["a", "b"]);
+    const p = d(merge({}).prepend({ data: "id", meta: "key" }));
+    expect(p.prependPaths).toEqual(["data", "meta"]);
+    expect(p.matchOnPaths).toEqual(["data.id", "meta.key"]);
+  });
+
   it("does not mutate the wrapped value", () => {
     const value = { data: [1] };
     merge(value).append("data").matchOn("id");
@@ -119,6 +131,11 @@ describe("once descriptors", () => {
 
   it("no ttl means null expiry", () => {
     expect(d(once(() => 1)).expiresAt()).toBeNull();
+  });
+
+  it("the last until() call wins", () => {
+    expect(d(once(() => 1).until(new Date(5_000)).until(60)).expiresAt(1_000_000)).toBe(1_060_000);
+    expect(d(once(() => 1).until(60).until(new Date(5_000))).expiresAt(1_000_000)).toBe(5_000);
   });
 
   it("fresh() marks the prop fresh", () => {

@@ -216,15 +216,17 @@ export default class PropDescriptor<T = unknown> {
   }
 
   /**
-   * Set the once-prop's expiry.
+   * Set the once-prop's expiry, replacing any expiry set by an earlier call.
    *
    * @param delay TTL in seconds, or an absolute expiry date.
    */
   until(delay: number | Date): this {
     if (delay instanceof Date) {
       this.expiresAtDate = delay;
+      this.ttlSeconds = null;
     } else {
       this.ttlSeconds = delay;
+      this.expiresAtDate = null;
     }
 
     return this;

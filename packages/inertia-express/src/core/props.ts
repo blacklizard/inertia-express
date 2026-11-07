@@ -3,34 +3,73 @@ import PropDescriptor from './prop-descriptor.js';
 import type { PropSource, ScrollOptions } from './prop-descriptor.js';
 
 /**
+ * Argument accepted by `append()` / `prepend()`: a root flag, a path, a list
+ * of paths, or a path-to-matchOn record.
+ */
+type MergePath = boolean | string | string[] | Record<string, string>;
+
+/**
  * Prop omitted from the first load and resolved only when requested.
  */
-export type OptionalProp<T> = Pick<PropDescriptor<T>, 'once' | 'as' | 'until' | 'fresh'>;
+export interface OptionalProp<T> {
+  once: (value?: boolean, as?: string, until?: number | Date) => OptionalProp<T>;
+  as: (key: string) => OptionalProp<T>;
+  until: (delay: number | Date) => OptionalProp<T>;
+  fresh: (value?: boolean) => OptionalProp<T>;
+}
 
 /**
  * Prop resolved in a follow-up request after the first load.
  */
-export type DeferProp<T> = Pick<PropDescriptor<T>, 'merge' | 'deepMerge' | 'append' | 'prepend' | 'matchOn' | 'once' | 'as' | 'until' | 'fresh' | 'rescue'>;
+export interface DeferProp<T> {
+  merge: () => DeferProp<T>;
+  deepMerge: () => DeferProp<T>;
+  append: (path?: MergePath, matchOn?: string) => DeferProp<T>;
+  prepend: (path?: MergePath, matchOn?: string) => DeferProp<T>;
+  matchOn: (path: string | string[]) => DeferProp<T>;
+  once: (value?: boolean, as?: string, until?: number | Date) => DeferProp<T>;
+  as: (key: string) => DeferProp<T>;
+  until: (delay: number | Date) => DeferProp<T>;
+  fresh: (value?: boolean) => DeferProp<T>;
+  rescue: (value?: boolean) => DeferProp<T>;
+}
 
 /**
  * Prop the client merges into its existing value.
  */
-export type MergeProp<T> = Pick<PropDescriptor<T>, 'deepMerge' | 'append' | 'prepend' | 'matchOn' | 'once' | 'as' | 'until' | 'fresh'>;
+export interface MergeProp<T> {
+  deepMerge: () => MergeProp<T>;
+  append: (path?: MergePath, matchOn?: string) => MergeProp<T>;
+  prepend: (path?: MergePath, matchOn?: string) => MergeProp<T>;
+  matchOn: (path: string | string[]) => MergeProp<T>;
+  once: (value?: boolean, as?: string, until?: number | Date) => MergeProp<T>;
+  as: (key: string) => MergeProp<T>;
+  until: (delay: number | Date) => MergeProp<T>;
+  fresh: (value?: boolean) => MergeProp<T>;
+}
 
 /**
- * Prop included on every response, regardless of partial filtering.
+ * Prop included on every response, regardless of partial filtering. It has
+ * no chain methods.
  */
 export type AlwaysProp<T> = Pick<PropDescriptor<T>, never>;
 
 /**
  * Prop the client resolves once and caches across visits.
  */
-export type OnceProp<T> = Pick<PropDescriptor<T>, 'as' | 'until' | 'fresh'>;
+export interface OnceProp<T> {
+  as: (key: string) => OnceProp<T>;
+  until: (delay: number | Date) => OnceProp<T>;
+  fresh: (value?: boolean) => OnceProp<T>;
+}
 
 /**
  * Infinite-scroll prop carrying pagination metadata.
  */
-export type ScrollProp<T> = Pick<PropDescriptor<T>, 'defer' | 'matchOn'>;
+export interface ScrollProp<T> {
+  defer: (group?: string) => ScrollProp<T>;
+  matchOn: (path: string | string[]) => ScrollProp<T>;
+}
 
 /**
  * Throw a `TypeError` unless `fn` is callable.
