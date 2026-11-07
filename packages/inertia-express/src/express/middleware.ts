@@ -1,5 +1,6 @@
 import { format } from 'node:util';
 
+import installEmptyResponseGuard from './empty-response.js';
 import installRedirectOverride from './redirect-override.js';
 import { sendInertiaLocation, sendInertiaResponse } from './response.js';
 import {
@@ -84,6 +85,8 @@ function createFlash(req: Request): Request['flash'] {
  *   - Auto-promotes redirects after PUT/PATCH/DELETE/QUERY to 303 for Inertia visits.
  *   - Answers redirects to a URL with a `#` fragment with 409 + `X-Inertia-Redirect`
  *     on Inertia visits (not prefetches) so the client can navigate itself.
+ *   - Redirects back (to `Referer`, else `/`) when an Inertia request ends with an
+ *     empty 200 and nothing written (inertia-laravel `onEmptyResponse`).
  *
  * Mount before your route handlers:
  *
@@ -178,6 +181,7 @@ export function inertia(options: InertiaMiddlewareOptions = {}) {
     // fragment redirects with 409 + X-Inertia-Redirect.
     if (info.isInertia) {
       installRedirectOverride(req, res);
+      installEmptyResponseGuard(req, res);
     }
 
     // Make sure CDNs / shared caches don't mix Inertia JSON and HTML variants.

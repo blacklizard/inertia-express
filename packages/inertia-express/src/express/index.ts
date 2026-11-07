@@ -51,6 +51,7 @@ export type { ErrorPageInput } from '../core/index.js';
 export { renderErrorPage } from '../core/index.js';
 export type { EdgeCacheDecision, EdgeCachePolicy } from './edge-cache.js';
 export { applyEdgeCache } from './edge-cache.js';
+export { default as installEmptyResponseGuard } from './empty-response.js';
 export { default as installRedirectOverride } from './redirect-override.js';
 export type { MemoryCacheStoreOptions } from './memory-store.js';
 export { createMemoryCacheStore } from './memory-store.js';

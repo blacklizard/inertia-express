@@ -259,6 +259,14 @@ describe("v3 protocol conformance", () => {
   });
 
   describe("redirects", () => {
+    it("turns an empty 200 on an Inertia visit into a redirect back", async () => {
+      const app = buildApp();
+      app.put("/", (_req, res) => { res.end(); });
+      const r = await request(app).put("/").set("x-inertia", "true").set("referer", "/foo");
+      expect(r.status).toBe(303);
+      expect(r.headers.location).toBe("/foo");
+    });
+
     it("answers a fragment redirect with 409 + X-Inertia-Redirect on Inertia visits", async () => {
       const app = buildApp();
       app.get("/action", (_req, res) => res.redirect("/article#section"));

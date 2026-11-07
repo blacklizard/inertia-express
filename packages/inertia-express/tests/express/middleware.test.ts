@@ -866,4 +866,77 @@ describe("req.flash (connect-flash compat)", () => {
     expect(JSON.parse(r.text).flash).toEqual({ success: ["Saved!"] });
     expect(session.flash).toBeUndefined();
   });
+
+  it("no response value by default means automatically redirecting back for inertia requests", async () => {
+    const app = buildApp();
+    let called = false;
+    app.put("/", (_req, res) => { called = true; res.end(); });
+    const r = await request(app).put("/").set("x-inertia", "true").set("referer", "/foo");
+    expect(called).toBe(true);
+    expect(r.status).toBe(303);
+    expect(r.headers.location).toBe("/foo");
+  });
+
+  it("an empty send on a GET redirects back with 302", async () => {
+    const app = buildApp();
+    app.get("/", (_req, res) => { res.send(""); });
+    const r = await request(app).get("/").set("x-inertia", "true").set("referer", "/foo");
+    expect(r.status).toBe(302);
+    expect(r.headers.location).toBe("/foo");
+  });
+
+  it("redirecting back falls back to / without a Referer", async () => {
+    const app = buildApp();
+    app.put("/", (_req, res) => { res.end(); });
+    const r = await request(app).put("/").set("x-inertia", "true");
+    expect(r.status).toBe(303);
+    expect(r.headers.location).toBe("/");
+  });
+
+  it("no response means no response for non-inertia requests", async () => {
+    const app = buildApp();
+    app.put("/", (_req, res) => { res.end(); });
+    const r = await request(app).put("/").set("referer", "/foo");
+    expect(r.status).toBe(200);
+    expect(r.text).toBe("");
+  });
+
+  it("a response body of zero is not treated as empty for inertia requests", async () => {
+    const app = buildApp();
+    app.get("/", (_req, res) => { res.send("0"); });
+    const r = await request(app).get("/").set("x-inertia", "true").set("referer", "/foo");
+    expect(r.status).toBe(200);
+    expect(r.text).toBe("0");
+  });
+
+  it("streamed responses are not treated as empty for inertia requests", async () => {
+    const app = buildApp();
+    app.get("/", (_req, res) => { res.write("hello"); res.end(); });
+    const r = await request(app).get("/").set("x-inertia", "true").set("referer", "/foo");
+    expect(r.status).toBe(200);
+    expect(r.text).toBe("hello");
+  });
+
+  it("a 204 end is not treated as an empty 200", async () => {
+    const app = buildApp();
+    app.delete("/", (_req, res) => { res.status(204).end(); });
+    const r = await request(app).delete("/").set("x-inertia", "true").set("referer", "/foo");
+    expect(r.status).toBe(204);
+  });
+
+  it("flushed headers are not intercepted", async () => {
+    const app = buildApp();
+    app.get("/", (_req, res) => { res.flushHeaders(); res.end(); });
+    const r = await request(app).get("/").set("x-inertia", "true").set("referer", "/foo");
+    expect(r.status).toBe(200);
+  });
+
+  it("res.end(callback) is empty, redirects back and still invokes the callback", async () => {
+    const app = buildApp();
+    let finished = false;
+    app.put("/", (_req, res) => { res.end(() => { finished = true; }); });
+    const r = await request(app).put("/").set("x-inertia", "true").set("referer", "/foo");
+    expect(r.status).toBe(303);
+    expect(finished).toBe(true);
+  });
 });
