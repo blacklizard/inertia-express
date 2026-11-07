@@ -15,7 +15,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import PropDescriptor from "../../src/core/prop-descriptor.js";
-import { resolveProps } from "../../src/core/props-resolver.js";
+import PropsResolver, { resolveProps } from "../../src/core/props-resolver.js";
 import { always, defer, merge, once, optional, scroll } from "../../src/core/props.js";
 import { makeRequest, partialRequest } from "./support/request.js";
 
@@ -994,6 +994,14 @@ describe("onRescue containment", () => {
       process.off("unhandledRejection", listener);
       spy.mockRestore();
     }
+  });
+});
+
+describe("resolver instances are single-use", () => {
+  it("throws on a second resolve() call", async () => {
+    const resolver = new PropsResolver(makeRequest(), COMPONENT);
+    await resolver.resolve({}, { a: 1 });
+    await expect(resolver.resolve({}, { a: 1 })).rejects.toThrow(/already called/);
   });
 });
 
