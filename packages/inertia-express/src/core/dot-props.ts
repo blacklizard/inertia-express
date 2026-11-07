@@ -5,6 +5,19 @@ import type { PageProps } from './types.js';
 type Container = Record<string, unknown>;
 
 /**
+ * Defines `key` on `container` as an own data property, so `__proto__` never reaches the setter.
+ *
+ * @param container Object to write into.
+ * @param key Own key to define.
+ * @param value Value to store.
+ */
+function defineOwn(container: Container, key: string, value: unknown): void {
+  Object.defineProperty(container, key, {
+    value, enumerable: true, writable: true, configurable: true,
+  });
+}
+
+/**
  * Calls and awaits `value` when it is a bare function; returns anything else unchanged.
  *
  * @param value Prop value or closure.
@@ -50,14 +63,15 @@ async function setDotted(result: PageProps, key: string, value: unknown): Promis
   const last = segments.pop() as string;
   const target = await segments.reduce<Promise<Container>>(async (parentPromise, segment) => {
     const parent = await parentPromise;
-    const next = copyForWrite(await resolveClosure(parent[segment]));
+    const current = Object.hasOwn(parent, segment) ? parent[segment] : undefined;
+    const next = copyForWrite(await resolveClosure(current));
 
-    parent[segment] = next;
+    defineOwn(parent, segment, next);
 
     return next;
   }, Promise.resolve(result));
 
-  target[last] = value;
+  defineOwn(target, last, value);
 }
 
 /**

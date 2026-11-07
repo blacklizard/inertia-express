@@ -45,4 +45,27 @@ describe("unpackDotProps", () => {
   it("returns an equal object when nothing is dotted", async () => {
     expect(await unpackDotProps({ a: 1, b: [1] })).toEqual({ a: 1, b: [1] });
   });
+
+  it("treats inherited property names as missing segments", async () => {
+    const out = await unpackDotProps({ "hasOwnProperty.x": 1, "constructor.y": 2 });
+    expect(out).toEqual({ hasOwnProperty: { x: 1 }, constructor: { y: 2 } });
+  });
+
+  it("writes a __proto__ segment as an own key without touching the prototype", async () => {
+    const out = await unpackDotProps({ "__proto__.x": 1, a: 1 });
+    expect(Object.hasOwn(out, "__proto__")).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(out, "__proto__")?.value).toEqual({ x: 1 });
+    expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
+    expect(({} as { x?: unknown }).x).toBeUndefined();
+    expect(out.a).toBe(1);
+  });
+
+  it("does not mutate nested objects it walks through", async () => {
+    const inner = { b: 1 };
+    const input = { a: inner, "a.c.d": 2 };
+    const out = await unpackDotProps(input);
+    expect(out).toEqual({ a: { b: 1, c: { d: 2 } } });
+    expect(inner).toEqual({ b: 1 });
+    expect(out.a).not.toBe(inner);
+  });
 });
