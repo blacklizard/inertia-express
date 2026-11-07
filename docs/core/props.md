@@ -251,7 +251,7 @@ The page object gets `scrollProps: { [path]: { pageName, previousPage, nextPage,
 
 ## Descriptors are per-request values
 
-Descriptors are builders: every chain method mutates and returns the same object. Create them inside the handler for each request rather than hoisting one to module level and chaining on it per request — the chained configuration would accumulate across requests. The resolver itself only reads descriptors, so a hoisted descriptor that is never changed after creation is safe to reuse.
+Descriptors are builders: every chain method mutates and returns the same object. Create them inside the handler for each request rather than hoisting one to module level and chaining on it per request — the chained configuration would accumulate across requests. The resolver itself only reads descriptors, so a hoisted descriptor that is never changed after creation is safe to reuse. See [Caveats](/guide/caveats#descriptors-are-mutable).
 
 ```ts
 // ✅ built per request
@@ -266,6 +266,8 @@ Descriptors and closures may appear anywhere in the props tree, not only at the 
 
 - `only: ["users.data"]` on a plain-object `users` returns just `{ users: { data } }`. Children of a closure or descriptor bypass filtering and come back whole.
 - `except: ["users.data"]` drops the **whole** top-level `users`. This matches 2.x and the upstream reference server; inertia-laravel keeps `users` and drops only the child, and the adapter deliberately differs from it here.
+
+More partial-reload edge cases are listed under [Caveats](/guide/caveats#nested-except-drops-the-parent).
 
 ## Combining helpers
 

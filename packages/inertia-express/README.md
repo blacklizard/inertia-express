@@ -666,6 +666,7 @@ For typed page props on the client side, generic `res.inertia<TProps>("Component
 - The default HTML shell is intentionally minimal. Real apps should provide a `rootView`.
 - This adapter does not bundle a session implementation — bring your own (`express-session`, `cookie-session`, etc.).
 - Optimistic-update / `useHttp` server-side helpers are intentionally minimal here; the protocol primitives (`mergeProps`, `deepMergeProps`, `matchPropsOn`, `deferredProps`, `clearHistory`, `encryptHistory`) are exposed.
+- Behaviour that differs from inertia-laravel or from 2.x is listed on the docs site's [Caveats](https://blacklizard.github.io/inertia-express/guide/caveats) page.
 
 ## License
 
