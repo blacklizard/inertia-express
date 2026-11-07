@@ -338,6 +338,27 @@ describe("deferred metadata", () => {
     const r = await page({ auth: () => ({ user: "Jonathan", notifications: defer(() => [], "alerts") }) });
     expect(r.metadata.deferredProps).toEqual({ alerts: ["auth.notifications"] });
   });
+
+  it("a closure returning a descriptor directly is unwrapped and re-excluded on initial load", async () => {
+    let calls = 0;
+    const r = await page({
+      perms: () =>
+        optional(() => {
+          calls += 1;
+          return ["admin"];
+        }),
+      feed: () => defer(() => [], "g"),
+    });
+    expect(r.props).toEqual({});
+    expect(calls).toBe(0);
+    expect(r.metadata.deferredProps).toEqual({ g: ["feed"] });
+  });
+
+  it("a closure returning a descriptor directly resolves it on a partial", async () => {
+    const r = await page({ perms: () => optional(() => ["admin"]), feed: () => defer(() => [1], "g") }, partial("perms,feed"));
+    expect(r.props).toEqual({ perms: ["admin"], feed: [1] });
+    expect(r.metadata.deferredProps).toBeUndefined();
+  });
 });
 
 describe("shared props and value passthrough", () => {
@@ -388,5 +409,135 @@ describe("shared props and value passthrough", () => {
     });
     expect(order).toEqual(["b", "a"]);
     expect(Object.keys(r.props)).toEqual(["b", "a"]);
+  });
+});
+
+describe("merge metadata", () => {
+  it("nested merge prop is resolved", async () => {
+    const r = await page({ feed: { posts: merge([{ id: 1 }]) } });
+    expect(r.props).toEqual({ feed: { posts: [{ id: 1 }] } });
+  });
+
+  it("closure returning merge prop resolves with metadata", async () => {
+    const r = await page({ posts: () => merge([{ id: 1 }]) });
+    expect(r.props).toEqual({ posts: [{ id: 1 }] });
+    expect(r.metadata.mergeProps).toEqual(["posts"]);
+  });
+
+  it("closure returning defer prop collects deferred and merge metadata", async () => {
+    const r = await page({ posts: () => defer(() => [{ id: 1 }]).merge() });
+    expect(r.props).toEqual({});
+    expect(r.metadata.deferredProps).toEqual({ default: ["posts"] });
+    expect(r.metadata.mergeProps).toEqual(["posts"]);
+  });
+
+  it("nested merge prop is included on partial request", async () => {
+    const r = await page({ feed: { posts: merge([{ id: 1 }]) } }, partial("feed.posts"));
+    expect(r.props).toEqual({ feed: { posts: [{ id: 1 }] } });
+  });
+
+  it("nested merge prop metadata is collected", async () => {
+    const r = await page({ feed: { posts: merge([{ id: 1 }]) } });
+    expect(r.metadata.mergeProps).toEqual(["feed.posts"]);
+  });
+
+  it("nested prepend merge prop metadata is collected", async () => {
+    const r = await page({ feed: { posts: merge([{ id: 1 }]).prepend() } });
+    expect(r.metadata.prependProps).toEqual(["feed.posts"]);
+    expect(r.metadata.mergeProps).toBeUndefined();
+  });
+
+  it("nested deep merge prop metadata is collected", async () => {
+    const r = await page({ settings: { preferences: merge({ theme: "dark" }).deepMerge() } });
+    expect(r.metadata.deepMergeProps).toEqual(["settings.preferences"]);
+    expect(r.metadata.mergeProps).toBeUndefined();
+  });
+
+  it("nested merge prop with nested path metadata is collected", async () => {
+    const r = await page({ feed: { posts: merge({ data: [{ id: 1 }] }).append("data") } });
+    expect(r.metadata.mergeProps).toEqual(["feed.posts.data"]);
+  });
+
+  it("nested merge prop with match on metadata is collected", async () => {
+    const r = await page({ feed: { posts: merge([{ id: 1 }]).matchOn("id").deepMerge() } });
+    expect(r.metadata.deepMergeProps).toEqual(["feed.posts"]);
+    expect(r.metadata.matchPropsOn).toEqual(["feed.posts.id"]);
+  });
+
+  it("append path with match on emits both paths", async () => {
+    const r = await page({ users: merge({ data: [] }).append("data", "id") });
+    expect(r.metadata).toEqual({ mergeProps: ["users.data"], matchPropsOn: ["users.data.id"] });
+  });
+
+  it("append and prepend paths emit to their own lists", async () => {
+    const r = await page({ chat: merge({ newer: [], older: [] }).append("newer").prepend("older") });
+    expect(r.metadata).toEqual({ mergeProps: ["chat.newer"], prependProps: ["chat.older"] });
+  });
+
+  it("paths win over the root flag", async () => {
+    const r = await page({ p: merge([1]).append("data").prepend(true) });
+    expect(r.metadata).toEqual({ mergeProps: ["p.data"] });
+  });
+
+  it("nested defer with merge metadata is collected", async () => {
+    const r = await page({ feed: { posts: defer(() => [{ id: 1 }]).merge() } });
+    expect(r.metadata.deferredProps).toEqual({ default: ["feed.posts"] });
+    expect(r.metadata.mergeProps).toEqual(["feed.posts"]);
+  });
+
+  it("nested merge metadata is collected on exact partial request", async () => {
+    const r = await page({ feed: { posts: merge([{ id: 1 }]) } }, partial("feed.posts"));
+    expect(r.props).toEqual({ feed: { posts: [{ id: 1 }] } });
+    expect(r.metadata.mergeProps).toEqual(["feed.posts"]);
+  });
+
+  it("nested merge metadata is collected when parent is requested", async () => {
+    const r = await page({ feed: { posts: merge([{ id: 1 }]) } }, partial("feed"));
+    expect(r.props).toEqual({ feed: { posts: [{ id: 1 }] } });
+    expect(r.metadata.mergeProps).toEqual(["feed.posts"]);
+  });
+
+  it("nested merge prop metadata is suppressed by reset header", async () => {
+    const r = await page(
+      { feed: { posts: merge([{ id: 1 }]) } },
+      partialRequest(COMPONENT, { only: ["feed.posts"], reset: ["feed.posts"] }),
+    );
+    expect(r.props).toEqual({ feed: { posts: [{ id: 1 }] } });
+    expect(r.metadata.mergeProps).toBeUndefined();
+  });
+
+  it("except header suppresses nested merge metadata", async () => {
+    const r = await page(
+      { feed: { posts: merge([{ id: 1 }]), comments: merge([{ id: 2 }]) } },
+      partial("feed.posts,feed.comments", "feed.posts"),
+    );
+    expect(r.props).toEqual({ feed: { comments: [{ id: 2 }] } });
+    expect(r.metadata.mergeProps).toEqual(["feed.comments"]);
+  });
+
+  it("except header for parent suppresses all nested metadata", async () => {
+    const r = await page({ feed: { posts: merge([{ id: 1 }]) }, other: "value" }, partial("feed,other", "feed"));
+    expect(r.props).toEqual({ other: "value" });
+    expect(r.metadata.mergeProps).toBeUndefined();
+  });
+
+  it("deeply nested merge prop metadata uses full path", async () => {
+    const r = await page({ app: { feed: { posts: merge([{ id: 1 }]) } } });
+    expect(r.metadata.mergeProps).toEqual(["app.feed.posts"]);
+  });
+
+  it("nested props on non partial inertia request emit merge metadata", async () => {
+    const r = await page(
+      { dashboard: { stats: "visible", feed: merge([{ id: 1 }]), notifications: defer(() => []) } },
+      makeRequest({ isInertia: true }),
+    );
+    expect(r.metadata.mergeProps).toEqual(["dashboard.feed"]);
+    expect(r.metadata.deferredProps).toEqual({ default: ["dashboard.notifications"] });
+  });
+
+  it("a merge prop requested by its child path keeps its metadata", async () => {
+    const r = await page({ users: merge({ data: [1] }).append("data") }, partial("users.data"));
+    expect(r.props).toEqual({ users: { data: [1] } });
+    expect(r.metadata.mergeProps).toEqual(["users.data"]);
   });
 });

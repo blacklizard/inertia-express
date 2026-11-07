@@ -479,13 +479,51 @@ export default class PropsResolver {
   }
 
   /**
-   * Collect the merge strategy for a mergeable prop. Stub: Task 5 implements it.
+   * Collect the merge strategy for a mergeable prop, unless the client asked
+   * to reset it or a partial request filters it out.
    *
-   * @param _path Dot path of the prop.
-   * @param _prop The mergeable descriptor.
+   * @param path Dot path of the prop.
+   * @param prop The mergeable descriptor.
    */
-  // eslint-disable-next-line class-methods-use-this
-  private collectMergeableMetadata(_path: string, _prop: PropDescriptor): void {}
+  private collectMergeableMetadata(path: string, prop: PropDescriptor): void {
+    if (this.request.resetKeys?.includes(path)) {
+      return;
+    }
+
+    if (this.isPartial && !this.isIncludedInPartialMetadata(path)) {
+      return;
+    }
+
+    if (prop.deep) {
+      this.deepMergeProps.push(path);
+    } else if (prop.appendsAtRoot) {
+      this.mergeProps.push(path);
+    } else if (prop.prependsAtRoot) {
+      this.prependProps.push(path);
+    } else {
+      this.mergeProps.push(...prop.appendPaths.map((appendPath) => `${path}.${appendPath}`));
+      this.prependProps.push(...prop.prependPaths.map((prependPath) => `${path}.${prependPath}`));
+    }
+
+    this.matchPropsOn.push(...prop.matchOnPaths.map((matchOn) => `${path}.${matchOn}`));
+  }
+
+  /**
+   * Determine if the path should contribute metadata during a partial request.
+   *
+   * @param path Dot path of the prop.
+   */
+  private isIncludedInPartialMetadata(path: string): boolean {
+    if (this.only !== null && !matchesOnly(path, this.only)) {
+      return false;
+    }
+
+    if (this.except !== null && matchesExcept(path, this.except)) {
+      return false;
+    }
+
+    return true;
+  }
 
   /**
    * Collect scroll pagination metadata. Stub: Task 7 implements it.
