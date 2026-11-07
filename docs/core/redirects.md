@@ -31,7 +31,7 @@ app.post("/comments", async (req, res) => {
 
 ### Empty responses
 
-If a handler ends an Inertia request with a `200` and an empty body (`res.end()`, `res.send("")`), the middleware turns the response into a redirect back: to the `Referer` header, or `/` when there is none. The redirect goes through the patched `res.redirect`, so it is a `303` after `PUT`, `PATCH`, `DELETE` or `QUERY` and a `302` otherwise. This is a port of inertia-laravel's `Middleware::onEmptyResponse`.
+If a handler ends an Inertia request with a `200` and an empty body (`res.end()`, `res.send("")`), the middleware turns the response into a redirect back: to the `Referer` header, or `/` when there is none; this is the same trust model as Laravel's `back()`. The redirect goes through the patched `res.redirect`, so it is a `303` after `PUT`, `PATCH`, `DELETE` or `QUERY` and a `302` otherwise. This is a port of inertia-laravel's `Middleware::onEmptyResponse`.
 
 ```ts
 app.put("/settings", async (req, res) => {

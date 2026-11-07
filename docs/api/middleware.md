@@ -119,6 +119,10 @@ res.redirect(303, "/profile");
 
 ---
 
+## `installRedirectOverride(req, res)` / `installEmptyResponseGuard(req, res)`
+
+Both are what `inertia()` installs on every Inertia request: the first promotes `res.redirect` to a `303` after `PUT`, `PATCH`, `DELETE` and `QUERY` and turns redirects to a fragment URL into a `409` location response, the second redirects back when a handler ends with an empty `200`. They are exported for adapters that compose their own middleware; most apps never call them.
+
 ## `req.flash(type?, msg?, ...args)`
 
 `connect-flash`-compatible flash API — this package is a drop-in replacement for [`connect-flash`](https://www.npmjs.com/package/connect-flash). Buckets live in `req.session.flash`.
