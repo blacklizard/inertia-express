@@ -76,6 +76,112 @@ function reportRescuedError(error: unknown, path: string): void {
 }
 
 /**
+ * Marker returned by a settled entry that is left out of its parent node.
+ */
+const EXCLUDED: unique symbol = Symbol('excluded');
+
+/**
+ * An error thrown by a rescuable descriptor, carried to the walk so the
+ * rescue is recorded in insertion order.
+ */
+interface Rescued {
+  /** The thrown value. */
+  error: unknown;
+}
+
+/**
+ * Every {@link Rescued} wrapper created by {@link rescued}.
+ */
+const rescuedMarkers = new WeakSet();
+
+/**
+ * Wrap a rescued error.
+ *
+ * @param error The thrown value.
+ */
+function rescued(error: unknown): Rescued {
+  const marker = { error };
+  rescuedMarkers.add(marker);
+
+  return marker;
+}
+
+/**
+ * `true` when `value` is a wrapper created by {@link rescued}.
+ *
+ * @param value A resolved value.
+ */
+function isRescued(value: unknown): value is Rescued {
+  return typeof value === 'object' && value !== null && rescuedMarkers.has(value);
+}
+
+/**
+ * One included entry of a node, classified before any entry is awaited.
+ */
+interface Entry {
+  /** Key of the entry in its parent node. */
+  key: string;
+  /** Dot path of the entry. */
+  path: string;
+  /** The prop as found in its parent node. */
+  prop: unknown;
+  /** Whether the entry is excluded from the initial load. */
+  excluded: boolean;
+  /** The started resolution, or `null` for excluded entries and plain values. */
+  pending: Promise<unknown> | null;
+}
+
+/**
+ * `true` when a prop must be resolved asynchronously: a descriptor, a
+ * function, or a thenable. Anything else is copied as is.
+ *
+ * @param prop The prop as found in its parent node.
+ */
+function needsResolution(prop: unknown): boolean {
+  if (typeof prop === 'function') {
+    return true;
+  }
+
+  if (prop === null || typeof prop !== 'object') {
+    return false;
+  }
+
+  return isPropDescriptor(prop) || typeof (prop as { then?: unknown }).then === 'function';
+}
+
+/**
+ * Swallow a rejection on a started resolution that may never be awaited
+ * because an earlier sibling failed; the awaited copy still rejects.
+ */
+function ignoreRejection(): void {}
+
+/**
+ * Write a settled entry into the node being built, skipping excluded entries.
+ * Object keys are written as own data properties, so `__proto__` never
+ * reaches the prototype setter.
+ *
+ * @param result Node being built; written in place.
+ * @param key Key of the entry.
+ * @param outcome Settled value, or {@link EXCLUDED}.
+ */
+function writeEntry(result: Node, key: string, outcome: unknown): void {
+  if (outcome === EXCLUDED) {
+    return;
+  }
+
+  if (Array.isArray(result)) {
+    result.push(outcome);
+  } else if (key === '__proto__') {
+    Object.defineProperty(result, key, {
+      value: outcome, enumerable: true, writable: true, configurable: true,
+    });
+  } else {
+    // eslint-disable-next-line no-param-reassign -- result is the fresh node this walk is building
+    result[key] = outcome;
+  }
+}
+
+/**
  * Where a mergeable prop merges for one request: at its root (appending or
  * prepending) or at the listed child paths.
  */
@@ -192,96 +298,202 @@ export default class PropsResolver {
   }
 
   /**
-   * Recursively resolve a props node sequentially in insertion order,
-   * collecting metadata along the way. Arrays come back as arrays, with
-   * excluded entries dropped; objects come back as fresh plain objects.
-   * When the original prop was not itself a plain object or array (e.g. a
-   * closure that returned one), its children bypass partial filtering.
+   * Recursively resolve a props node, collecting metadata along the way.
+   * Every included entry that needs resolving is started in insertion order
+   * before any is awaited, so siblings resolve concurrently; each entry is
+   * then settled in insertion order (rescue, one-level unwrap, metadata,
+   * recursion), keeping output key order and metadata order deterministic.
+   * Plain values are copied synchronously, so a node without closures or
+   * descriptors comes back without a promise. Arrays come back as arrays
+   * with excluded entries dropped, so later index-based `except`/`reset`
+   * paths shift down; objects come back as fresh plain objects. When the
+   * original prop was not itself a plain object or array (e.g. a closure
+   * that returned one), its children bypass partial filtering.
    *
    * @param node Plain object or array to walk.
    * @param prefix Dot path of `node`, or `''` at the root.
    * @param parentWasResolved Whether an ancestor was produced by resolving a closure or descriptor.
    */
-  private async walk(node: Node, prefix: string, parentWasResolved: boolean): Promise<Node> {
-    const isArray = Array.isArray(node);
-    const entries: [string, unknown][] = isArray
-      ? node.map((value, index): [string, unknown] => [String(index), value])
-      : Object.entries(node);
+  private walk(node: Node, prefix: string, parentWasResolved: boolean): Node | Promise<Node> {
+    const entries = this.startEntries(node, prefix, parentWasResolved);
+    const result: Node = Array.isArray(node) ? [] : {};
 
-    const included = await entries.reduce<Promise<[string, unknown][]>>(async (pending, [key, value]) => {
-      const accumulated = await pending;
-      const path = prefix === '' ? key : `${prefix}.${key}`;
-      const outcome = await this.resolveEntry(value, path, parentWasResolved);
+    for (let index = 0; index < entries.length; index += 1) {
+      const entry = entries[index] as Entry;
+      const outcome = this.settleEntry(entry, parentWasResolved);
 
-      return outcome.included ? [...accumulated, [key, outcome.value]] : accumulated;
-    }, Promise.resolve([]));
+      if (outcome instanceof Promise) {
+        return this.finishWalk(entries, index, outcome, result, parentWasResolved);
+      }
 
-    if (isArray) {
-      return included.map(([, value]) => value);
+      writeEntry(result, entry.key, outcome);
     }
 
-    return included.reduce<Record<string, unknown>>((result, [key, value]) => {
-      Object.defineProperty(result, key, {
-        value, enumerable: true, writable: true, configurable: true,
-      });
-
-      return result;
-    }, {});
+    return result;
   }
 
   /**
-   * Run one prop through the per-node pipeline: partial filter, initial-load
-   * exclusion, resolution, one-level descriptor unwrap, metadata, recursion.
+   * Continue a walk asynchronously from the first entry whose outcome is pending.
    *
-   * @param prop The prop as found in its parent node.
-   * @param path Dot path of the prop.
+   * @param entries Started entries of the node.
+   * @param index Index of the pending entry.
+   * @param pending Outcome of the entry at `index`.
+   * @param result Node being built; written in place.
    * @param parentWasResolved Whether an ancestor was produced by resolving a closure or descriptor.
    */
-  private async resolveEntry(
-    prop: unknown,
-    path: string,
+  private async finishWalk(
+    entries: Entry[],
+    index: number,
+    pending: Promise<unknown>,
+    result: Node,
     parentWasResolved: boolean,
-  ): Promise<{ included: false } | { included: true; value: unknown }> {
-    if (!this.shouldIncludeInPartialResponse(prop, path, parentWasResolved)) {
-      return { included: false };
+  ): Promise<Node> {
+    writeEntry(result, (entries[index] as Entry).key, await pending);
+
+    for (let next = index + 1; next < entries.length; next += 1) {
+      const entry = entries[next] as Entry;
+      const outcome = this.settleEntry(entry, parentWasResolved);
+
+      // eslint-disable-next-line no-await-in-loop -- entries are settled one at a time in insertion order; their sources already run concurrently
+      writeEntry(result, entry.key, outcome instanceof Promise ? await outcome : outcome);
     }
 
-    if (!this.isPartial && this.excludeFromInitialResponse(prop, path)) {
-      return { included: false };
+    return result;
+  }
+
+  /**
+   * Run the synchronous pre-resolve checks (partial filter, initial-load
+   * exclusion) over a node's entries in insertion order and start resolving
+   * every included entry that needs it.
+   *
+   * @param node Plain object or array to walk.
+   * @param prefix Dot path of `node`, or `''` at the root.
+   * @param parentWasResolved Whether an ancestor was produced by resolving a closure or descriptor.
+   */
+  private startEntries(node: Node, prefix: string, parentWasResolved: boolean): Entry[] {
+    const entries: Entry[] = [];
+
+    const visit = (prop: unknown, key: string): void => {
+      const path = prefix === '' ? key : `${prefix}.${key}`;
+
+      if (this.shouldIncludeInPartialResponse(prop, path, parentWasResolved)) {
+        entries.push(this.startEntry(key, path, prop));
+      }
+    };
+
+    if (Array.isArray(node)) {
+      node.forEach((prop, index) => visit(prop, String(index)));
+    } else {
+      Object.keys(node).forEach((key) => visit(node[key], key));
     }
 
-    let current = prop;
-    let value = await this.resolveValue(current, path);
+    return entries;
+  }
 
-    if (this.rescuedProps.includes(path)) {
-      return { included: false };
+  /**
+   * Classify one included entry: excluded from the initial load, pending
+   * resolution (started now), or a plain value copied as is.
+   *
+   * @param key Key of the entry in its parent node.
+   * @param path Dot path of the entry.
+   * @param prop The prop as found in its parent node.
+   */
+  private startEntry(key: string, path: string, prop: unknown): Entry {
+    if (!this.isPartial && this.isExcludedFromInitialResponse(prop, path)) {
+      return {
+        key, path, prop, excluded: true, pending: null,
+      };
+    }
+
+    if (needsResolution(prop)) {
+      const pending = this.resolveValue(prop);
+      pending.catch(ignoreRejection);
+
+      return {
+        key, path, prop, excluded: false, pending,
+      };
+    }
+
+    return {
+      key, path, prop, excluded: false, pending: null,
+    };
+  }
+
+  /**
+   * Finish one started entry in insertion order. Returns the value to write,
+   * {@link EXCLUDED}, or a promise of either when the entry needs awaiting.
+   *
+   * @param entry The started entry.
+   * @param parentWasResolved Whether an ancestor was produced by resolving a closure or descriptor.
+   */
+  private settleEntry(entry: Entry, parentWasResolved: boolean): unknown {
+    if (entry.excluded) {
+      this.collectExclusionMetadata(entry.prop as PropDescriptor, entry.path);
+
+      return EXCLUDED;
+    }
+
+    if (entry.pending !== null) {
+      return this.settleResolved(entry, entry.pending, parentWasResolved);
+    }
+
+    return this.include(entry.prop, entry.prop, entry.path, parentWasResolved);
+  }
+
+  /**
+   * Await a started resolution, then apply rescue, the one-level descriptor
+   * unwrap (with its own initial-load exclusion) and inclusion.
+   *
+   * @param entry The started entry.
+   * @param pending The entry's resolution.
+   * @param parentWasResolved Whether an ancestor was produced by resolving a closure or descriptor.
+   */
+  private async settleResolved(entry: Entry, pending: Promise<unknown>, parentWasResolved: boolean): Promise<unknown> {
+    const { path } = entry;
+    let current = entry.prop;
+    let value = await pending;
+
+    if (isRescued(value)) {
+      return this.rescue(value.error, path);
     }
 
     if (value !== current && this.isPropType(value)) {
       current = value;
 
-      if (!this.isPartial && this.excludeFromInitialResponse(current, path)) {
-        return { included: false };
+      if (!this.isPartial && this.isExcludedFromInitialResponse(current, path)) {
+        this.collectExclusionMetadata(current, path);
+
+        return EXCLUDED;
       }
 
-      value = await this.resolveValue(current, path);
+      value = await this.resolveValue(current);
 
-      if (this.rescuedProps.includes(path)) {
-        return { included: false };
+      if (isRescued(value)) {
+        return this.rescue(value.error, path);
       }
     }
 
-    this.assertScrollShape(current, path, value);
-    this.collectMetadata(current, path, value, parentWasResolved);
+    return this.include(current, value, path, parentWasResolved);
+  }
+
+  /**
+   * Include a resolved prop: check scroll shape, collect metadata, and walk
+   * into plain objects and arrays.
+   *
+   * @param prop The prop that produced `value`.
+   * @param value The prop's resolved value.
+   * @param path Dot path of the prop.
+   * @param parentWasResolved Whether an ancestor was produced by resolving a closure or descriptor.
+   */
+  private include(prop: unknown, value: unknown, path: string, parentWasResolved: boolean): unknown {
+    this.assertScrollShape(prop, path, value);
+    this.collectMetadata(prop, path, value);
 
     if (isPlainObjectOrArray(value)) {
-      return {
-        included: true,
-        value: await this.walk(value, path, parentWasResolved || !isPlainObjectOrArray(current)),
-      };
+      return this.walk(value, path, parentWasResolved || !isPlainObjectOrArray(prop));
     }
 
-    return { included: true, value };
+    return value;
   }
 
   /**
@@ -331,40 +543,47 @@ export default class PropsResolver {
   }
 
   /**
-   * Determine if a prop is excluded from the initial page response. Each
-   * exclusion type collects its metadata before the prop is removed.
+   * Determine if a prop is excluded from the initial page response: an
+   * optional or deferred descriptor, or a once-prop the client already holds.
    *
    * @param prop The prop being considered.
    * @param path Dot path of the prop.
    */
-  private excludeFromInitialResponse(prop: unknown, path: string): boolean {
+  private isExcludedFromInitialResponse(prop: unknown, path: string): prop is PropDescriptor {
     if (!isPropDescriptor(prop)) {
       return false;
     }
 
-    if (prop.ignoreFirstLoad) {
-      return this.excludeIgnoredProp(prop, path);
-    }
-
-    if (prop.defers) {
-      return this.excludeDeferredProp(prop, path);
-    }
-
-    if (this.isInertia && this.wasAlreadyLoadedByClient(prop, path)) {
-      return this.excludeAlreadyLoadedProp(prop, path);
-    }
-
-    return false;
+    return prop.ignoreFirstLoad
+      || prop.defers
+      || (this.isInertia && this.wasAlreadyLoadedByClient(prop, path));
   }
 
   /**
-   * Exclude a first-load-ignored prop (optional, defer) while collecting its
-   * deferred, merge and once metadata.
+   * Collect the metadata of a prop excluded from the initial response
+   * according to why it was excluded.
    *
    * @param prop The descriptor being excluded.
    * @param path Dot path of the prop.
    */
-  private excludeIgnoredProp(prop: PropDescriptor, path: string): boolean {
+  private collectExclusionMetadata(prop: PropDescriptor, path: string): void {
+    if (prop.ignoreFirstLoad) {
+      this.collectIgnoredPropMetadata(prop, path);
+    } else if (prop.defers) {
+      this.collectDeferredExclusionMetadata(prop, path);
+    } else {
+      this.collectOnceMetadata(path, prop);
+    }
+  }
+
+  /**
+   * Collect the deferred, merge and once metadata of an excluded
+   * first-load-ignored prop (optional, defer).
+   *
+   * @param prop The descriptor being excluded.
+   * @param path Dot path of the prop.
+   */
+  private collectIgnoredPropMetadata(prop: PropDescriptor, path: string): void {
     if (prop.defers && !this.wasAlreadyLoadedByClient(prop, path)) {
       this.collectDeferredPropMetadata(path, prop);
     }
@@ -376,36 +595,20 @@ export default class PropsResolver {
     if (prop.resolvesOnce) {
       this.collectOnceMetadata(path, prop);
     }
-
-    return true;
   }
 
   /**
-   * Exclude a deferred prop while collecting its deferred-group and merge metadata.
+   * Collect the deferred-group and merge metadata of an excluded deferred prop.
    *
    * @param prop The descriptor being excluded.
    * @param path Dot path of the prop.
    */
-  private excludeDeferredProp(prop: PropDescriptor, path: string): boolean {
+  private collectDeferredExclusionMetadata(prop: PropDescriptor, path: string): void {
     this.collectDeferredPropMetadata(path, prop);
 
     if (prop.merges) {
       this.collectMergeableMetadata(path, prop, true);
     }
-
-    return true;
-  }
-
-  /**
-   * Exclude a once-prop the client already holds while preserving its once metadata.
-   *
-   * @param prop The descriptor being excluded.
-   * @param path Dot path of the prop.
-   */
-  private excludeAlreadyLoadedProp(prop: PropDescriptor, path: string): boolean {
-    this.collectOnceMetadata(path, prop);
-
-    return true;
   }
 
   /**
@@ -424,12 +627,14 @@ export default class PropsResolver {
 
   /**
    * Resolve a single prop value: a descriptor resolves its source, a bare
-   * function is called, and the result is awaited; anything else passes through.
+   * function is called, and the result is awaited; anything else passes
+   * through. An error thrown by a rescuable descriptor comes back wrapped in
+   * {@link Rescued}; any other error rejects.
    *
    * @param prop The prop to resolve.
-   * @param path Dot path of the prop.
    */
-  private async resolveValue(prop: unknown, path: string): Promise<unknown> {
+  // eslint-disable-next-line class-methods-use-this
+  private async resolveValue(prop: unknown): Promise<unknown> {
     try {
       if (isPropDescriptor(prop)) {
         return await prop.resolveSource();
@@ -439,9 +644,13 @@ export default class PropsResolver {
         return await (prop as () => unknown)();
       }
 
-      return prop;
+      return await prop;
     } catch (error) {
-      return this.rescue(error, prop, path);
+      if (isPropDescriptor(prop) && prop.rescues) {
+        return rescued(error);
+      }
+
+      throw error;
     }
   }
 
@@ -465,23 +674,17 @@ export default class PropsResolver {
   }
 
   /**
-   * Handle an error thrown while resolving a prop. A rescuable descriptor
-   * reports the error, records its path in `rescuedProps` and resolves to
-   * `null` so the walk omits it; any other prop rethrows the original error.
+   * Record a rescued prop: report the error, add its path to `rescuedProps`
+   * and omit it from the response.
    *
    * @param error The thrown value.
-   * @param prop The prop that threw.
    * @param path Dot path of the prop.
    */
-  private rescue(error: unknown, prop: unknown, path: string): null {
-    if (!isPropDescriptor(prop) || !prop.rescues) {
-      throw error;
-    }
-
+  private rescue(error: unknown, path: string): typeof EXCLUDED {
     this.onRescue(error, path);
     this.rescuedProps.push(path);
 
-    return null;
+    return EXCLUDED;
   }
 
   /**
@@ -501,9 +704,8 @@ export default class PropsResolver {
    * @param prop The prop being included.
    * @param path Dot path of the prop.
    * @param resolved The prop's resolved value.
-   * @param _parentWasResolved Whether an ancestor was produced by resolving a closure or descriptor.
    */
-  private collectMetadata(prop: unknown, path: string, resolved: unknown, _parentWasResolved: boolean): void {
+  private collectMetadata(prop: unknown, path: string, resolved: unknown): void {
     if (!isPropDescriptor(prop)) {
       return;
     }
