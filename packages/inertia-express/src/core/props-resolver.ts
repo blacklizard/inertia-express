@@ -246,7 +246,8 @@ export default class PropsResolver {
       value = await this.resolveValue(current, path);
     }
 
-    this.collectMetadata(current, path, parentWasResolved);
+    this.assertScrollShape(current, path, value);
+    this.collectMetadata(current, path, value, parentWasResolved);
 
     if (isPlainObjectOrArray(value)) {
       return {
@@ -399,11 +400,16 @@ export default class PropsResolver {
   /**
    * Resolve a single prop value: a descriptor resolves its source, a bare
    * function is called, and the result is awaited; anything else passes through.
+   * A scroll descriptor first has its merge intent configured from the request.
    *
    * @param prop The prop to resolve.
    * @param path Dot path of the prop.
    */
   private async resolveValue(prop: unknown, path: string): Promise<unknown> {
+    if (isPropDescriptor(prop) && prop.isScroll) {
+      this.configureMergeIntent(prop);
+    }
+
     try {
       if (isPropDescriptor(prop)) {
         return await prop.resolveSource();
@@ -416,6 +422,44 @@ export default class PropsResolver {
       return prop;
     } catch (error) {
       return this.rescue(error, prop, path);
+    }
+  }
+
+  /**
+   * Point a scroll descriptor's merge at its wrapper key, prepending when the
+   * client's merge intent is `prepend` and appending otherwise. Paths from an
+   * earlier request are cleared first so a reused descriptor is reconfigured.
+   * Port of `ScrollProp::configureMergeIntent`.
+   *
+   * @param prop The scroll descriptor.
+   */
+  private configureMergeIntent(prop: PropDescriptor): void {
+    prop.appendPaths.splice(0);
+    prop.prependPaths.splice(0);
+
+    if (this.request.mergeIntent === 'prepend') {
+      prop.prepend(prop.wrapper);
+    } else {
+      prop.append(prop.wrapper);
+    }
+  }
+
+  /**
+   * Throw when a scroll prop did not resolve to a plain object holding its
+   * wrapper key as an own property.
+   *
+   * @param prop The prop being included.
+   * @param path Dot path of the prop.
+   * @param resolved The prop's resolved value.
+   */
+  // eslint-disable-next-line class-methods-use-this
+  private assertScrollShape(prop: unknown, path: string, resolved: unknown): void {
+    if (!isPropDescriptor(prop) || !prop.isScroll) {
+      return;
+    }
+
+    if (Array.isArray(resolved) || !isPlainObjectOrArray(resolved) || !Object.hasOwn(resolved, prop.wrapper)) {
+      throw new TypeError(`Scroll prop '${path}' must resolve to an object with a '${prop.wrapper}' key`);
     }
   }
 
@@ -448,9 +492,10 @@ export default class PropsResolver {
    *
    * @param prop The prop being included.
    * @param path Dot path of the prop.
+   * @param resolved The prop's resolved value.
    * @param _parentWasResolved Whether an ancestor was produced by resolving a closure or descriptor.
    */
-  private collectMetadata(prop: unknown, path: string, _parentWasResolved: boolean): void {
+  private collectMetadata(prop: unknown, path: string, resolved: unknown, _parentWasResolved: boolean): void {
     if (!isPropDescriptor(prop)) {
       return;
     }
@@ -460,7 +505,7 @@ export default class PropsResolver {
     }
 
     if (prop.isScroll) {
-      this.collectScrollMetadata(path, prop);
+      this.collectScrollMetadata(path, prop, resolved);
     }
 
     if (prop.resolvesOnce) {
@@ -528,13 +573,19 @@ export default class PropsResolver {
   }
 
   /**
-   * Collect scroll pagination metadata. Stub: Task 7 implements it.
+   * Collect scroll pagination metadata, flagged for reset when the client
+   * asked to reset the prop.
    *
-   * @param _path Dot path of the prop.
-   * @param _prop The scroll descriptor.
+   * @param path Dot path of the prop.
+   * @param prop The scroll descriptor.
+   * @param resolved The prop's resolved value.
    */
-  // eslint-disable-next-line class-methods-use-this
-  private collectScrollMetadata(_path: string, _prop: PropDescriptor): void {}
+  private collectScrollMetadata(path: string, prop: PropDescriptor, resolved: unknown): void {
+    this.scrollProps[path] = {
+      ...prop.metadataFor(resolved),
+      reset: this.request.resetKeys?.includes(path) ?? false,
+    };
+  }
 
   /**
    * Collect once-prop metadata under its custom key (or path), unless a

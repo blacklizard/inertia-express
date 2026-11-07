@@ -16,7 +16,7 @@
 import { describe, expect, it } from "vitest";
 import PropDescriptor from "../../src/core/prop-descriptor.js";
 import { resolveProps } from "../../src/core/props-resolver.js";
-import { always, defer, merge, once, optional } from "../../src/core/props.js";
+import { always, defer, merge, once, optional, scroll } from "../../src/core/props.js";
 import { makeRequest, partialRequest } from "./support/request.js";
 
 const COMPONENT = "TestComponent";
@@ -641,6 +641,35 @@ describe("once props", () => {
     expect(r.props).toEqual({ plans: ["a"] });
   });
 
+  it("a closure returning an already-loaded once descriptor is excluded after unwrap", async () => {
+    let calls = 0;
+    const r = await page(
+      {
+        locale: () =>
+          once(() => {
+            calls += 1;
+            return "en";
+          }),
+        other: 1,
+      },
+      makeRequest({ isInertia: true, exceptOnceProps: ["locale"] }),
+    );
+    expect(r.props).toEqual({ other: 1 });
+    expect(calls).toBe(0);
+    expect(r.metadata.onceProps).toEqual({ locale: onceMeta("locale") });
+  });
+
+  it("except-once is ignored on a partial reload", async () => {
+    const r = await page({ plans: once(() => ["a"]) }, partialRequest(COMPONENT, { only: ["plans"], exceptOnce: ["plans"] }));
+    expect(r.props).toEqual({ plans: ["a"] });
+    expect(r.metadata.onceProps).toEqual({ plans: onceMeta("plans") });
+  });
+
+  it("a shared onceKey is last-write-wins", async () => {
+    const r = await page({ a: once(() => 1).as("k"), b: once(() => 2).as("k") });
+    expect(r.metadata.onceProps).toEqual({ k: onceMeta("b") });
+  });
+
   it("partial request for parent resolves all nested prop types", async () => {
     const r = await page(
       {
@@ -676,5 +705,40 @@ describe("once props", () => {
     expect(r.metadata.mergeProps).toEqual(["dashboard.feed"]);
     expect(r.metadata.deferredProps).toEqual({ default: ["dashboard.notifications"] });
     expect(r.metadata.onceProps).toEqual({ "dashboard.locale": onceMeta("dashboard.locale") });
+  });
+});
+
+describe("scroll props", () => {
+  const meta = { pageName: "page", previousPage: null, nextPage: 2, currentPage: 1 };
+  const posts = () => scroll(() => ({ data: [{ id: 1 }] }), { metadata: meta });
+
+  it("nested scroll prop metadata is collected", async () => {
+    const r = await page({ feed: { posts: posts() } });
+    expect(r.metadata.scrollProps).toEqual({ "feed.posts": { ...meta, reset: false } });
+  });
+
+  it("nested deferred scroll prop is excluded from initial load", async () => {
+    const r = await page({ feed: { posts: posts().defer() } });
+    expect(r.props).toEqual({ feed: {} });
+    expect(r.metadata.deferredProps).toEqual({ default: ["feed.posts"] });
+    expect(r.metadata.scrollProps).toBeUndefined();
+  });
+
+  it("a deferred scroll prop excluded on initial load still emits root merge metadata", async () => {
+    const r = await page({ feed: { posts: posts().defer() } });
+    expect(r.metadata).toEqual({ mergeProps: ["feed.posts"], deferredProps: { default: ["feed.posts"] } });
+  });
+
+  it("nested scroll prop is included on partial request", async () => {
+    const r = await page({ feed: { posts: posts() } }, partial("feed.posts"));
+    expect(r.props).toEqual({ feed: { posts: { data: [{ id: 1 }] } } });
+    expect(r.metadata.scrollProps).toEqual({ "feed.posts": { ...meta, reset: false } });
+    expect(r.metadata.mergeProps).toEqual(["feed.posts.data"]);
+  });
+
+  it("nested scroll prop reset flag is set by reset header", async () => {
+    const r = await page({ feed: { posts: posts() } }, makeRequest({ resetKeys: ["feed.posts"] }));
+    expect(r.metadata.scrollProps?.["feed.posts"].reset).toBe(true);
+    expect(r.metadata.mergeProps).toBeUndefined();
   });
 });
