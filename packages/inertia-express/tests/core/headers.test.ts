@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseInertiaRequest } from "../../src/core/headers.js";
+import { INERTIA_HEADERS, parseInertiaRequest } from "../../src/core/headers.js";
 
 describe("parseInertiaRequest", () => {
   it("detects Inertia requests via x-inertia: true", () => {
@@ -98,5 +98,35 @@ describe("parseInertiaRequest", () => {
     });
     expect(info.resetKeys).toEqual(["a", "b"]);
     expect(info.errorBag).toBe("user");
+  });
+});
+
+describe("once and infinite-scroll headers", () => {
+  it("parses except-once props and merge intent", () => {
+    const info = parseInertiaRequest({
+      headers: {
+        "x-inertia-except-once-props": "plans, user.settings",
+        "x-inertia-infinite-scroll-merge-intent": "prepend",
+      },
+      method: "get",
+      url: "/",
+    });
+    expect(info.exceptOnceProps).toEqual(["plans", "user.settings"]);
+    expect(info.mergeIntent).toBe("prepend");
+  });
+
+  it("defaults except-once to [] and merge intent to append", () => {
+    const info = parseInertiaRequest({
+      headers: { "x-inertia-infinite-scroll-merge-intent": "whatever" },
+      method: "get",
+      url: "/",
+    });
+    expect(info.exceptOnceProps).toEqual([]);
+    expect(info.mergeIntent).toBe("append");
+  });
+
+  it("exposes the new header names", () => {
+    expect(INERTIA_HEADERS.exceptOnceProps).toBe("x-inertia-except-once-props");
+    expect(INERTIA_HEADERS.mergeIntent).toBe("x-inertia-infinite-scroll-merge-intent");
   });
 });

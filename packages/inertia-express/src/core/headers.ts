@@ -16,6 +16,8 @@ export const INERTIA_HEADERS = {
   errorBag: 'x-inertia-error-bag',
   reset: 'x-inertia-reset',
   location: 'x-inertia-location',
+  exceptOnceProps: 'x-inertia-except-once-props',
+  mergeIntent: 'x-inertia-infinite-scroll-merge-intent',
 } as const;
 
 type HeaderRecord = Record<string, string | string[] | undefined>;
@@ -76,6 +78,8 @@ export function parseInertiaRequest(input: { headers: HeaderRecord; method: stri
   const partialExcept = parseList(readHeader(headers, INERTIA_HEADERS.partialExcept));
   const errorBag = readHeader(headers, INERTIA_HEADERS.errorBag);
   const resetKeys = parseList(readHeader(headers, INERTIA_HEADERS.reset));
+  const exceptOnceProps = parseList(readHeader(headers, INERTIA_HEADERS.exceptOnceProps)) ?? [];
+  const mergeIntent = readHeader(headers, INERTIA_HEADERS.mergeIntent) === 'prepend' ? 'prepend' : 'append';
 
   return {
     isInertia: inertia === 'true' || inertia === '1',
@@ -85,6 +89,8 @@ export function parseInertiaRequest(input: { headers: HeaderRecord; method: stri
     partialExcept,
     errorBag,
     resetKeys,
+    exceptOnceProps,
+    mergeIntent,
     method: input.method.toUpperCase(),
     url: input.url,
   };

@@ -27,14 +27,21 @@ export interface InertiaPage<TProps extends PageProps = PageProps> {
    */
   encryptHistory: boolean;
   /**
-   * v3: keys whose props should be deferred and fetched in a follow-up partial reload.
-   *    Grouped by deferred-load group name.
+   * v3: instructs the client to preserve the URL fragment across this visit.
    */
-  deferredProps?: Record<string, string[]>;
+  preserveFragment: boolean;
+  /**
+   * v3: top-level keys of props that came from shared props.
+   */
+  sharedProps?: string[];
   /**
    * v3: keys whose props should be merged (appended) on the client rather than replaced.
    */
   mergeProps?: string[];
+  /**
+   * v3: keys whose props should be prepended on the client rather than replaced.
+   */
+  prependProps?: string[];
   /**
    * v3: keys whose props should be *deep*-merged on the client (recursive merge
    * rather than shallow append).
@@ -46,6 +53,23 @@ export interface InertiaPage<TProps extends PageProps = PageProps> {
    */
   matchPropsOn?: string[];
   /**
+   * v3: keys whose props should be deferred and fetched in a follow-up partial reload.
+   *    Grouped by deferred-load group name.
+   */
+  deferredProps?: Record<string, string[]>;
+  /**
+   * v3: keys of props whose resolution failed and was rescued by the server.
+   */
+  rescuedProps?: string[];
+  /**
+   * v3: infinite-scroll pagination metadata, keyed by prop path.
+   */
+  scrollProps?: Record<string, ScrollMetadata & { reset: boolean }>;
+  /**
+   * v3: once-prop metadata, keyed by once key.
+   */
+  onceProps?: Record<string, OnceMetadata>;
+  /**
    * Read-once flash data, surfaced as a *top-level* page key (sibling to
    * `props`) rather than a prop — mirroring inertia-laravel's
    * `Response::resolveFlashData`. Omitted entirely when there is no flash.
@@ -54,71 +78,53 @@ export interface InertiaPage<TProps extends PageProps = PageProps> {
 }
 
 /**
- * A prop value that is evaluated lazily on every visit.
- */
-export type LazyProp<T = unknown> = (() => T | Promise<T>) & {
-  __inertia_lazy: true;
-};
-
-/**
- * A prop value that is only sent on partial reloads when explicitly requested
- * (i.e. its key appears in `X-Inertia-Partial-Data`). On full visits the prop
- * is omitted entirely.
- */
-export type OptionalProp<T = unknown> = (() => T | Promise<T>) & {
-  __inertia_optional: true;
-};
-
-/**
- * A prop that is omitted on the initial visit and instead loaded by an
- * automatic follow-up partial reload after the page mounts. Grouped by
- * `group` so several deferred props can be loaded in a single round-trip.
- */
-export type DeferredProp<T = unknown> = (() => T | Promise<T>) & {
-  __inertia_deferred: true;
-  group: string;
-};
-
-/**
- * A prop that is always included in the response — on full visits and on
- * partial reloads — regardless of `X-Inertia-Partial-Data` /
- * `X-Inertia-Partial-Except` filtering.
- */
-export type AlwaysProp<T = unknown> = (() => T | Promise<T>) & {
-  __inertia_always: true;
-};
-
-/**
- * A prop value the client should *append* to existing data rather than
- * replace (useful for paginated lists).
- */
-export type MergeProp<T = unknown> = T & {
-  __inertia_merge: true;
-  __inertia_match_on?: string[];
-};
-
-/**
- * A prop value the client should recursively *deep*-merge into existing data
- * rather than shallow-append.
- */
-export type DeepMergeProp<T = unknown> = T & {
-  __inertia_deep_merge: true;
-  __inertia_match_on?: string[];
-};
-
-/**
- * Any value accepted as a page prop: a plain JSON value, or one of the
- * wrapper types ({@link LazyProp}, {@link OptionalProp}, {@link DeferredProp},
- * {@link AlwaysProp}, {@link MergeProp}, {@link DeepMergeProp}). Structurally
- * this is `unknown` — the wrappers are documented here for discoverability.
- */
-export type PropValue = unknown;
-
-/**
  * Globally shared props: either a static object merged into every page, or
  * a (possibly async) function that returns one for the current request.
  */
 export type SharedPropsInput<TReq = unknown> = PageProps | ((req: TReq) => PageProps | Promise<PageProps>);
+
+/**
+ * Infinite-scroll pagination metadata for one scroll prop.
+ */
+export interface ScrollMetadata {
+  pageName: string;
+  previousPage: number | string | null;
+  nextPage: number | string | null;
+  currentPage: number | string | null;
+}
+
+/**
+ * Metadata for one once-prop: the prop path it resolves and its expiry as a
+ * millisecond epoch timestamp, or `null` when it never expires.
+ */
+export interface OnceMetadata {
+  prop: string;
+  expiresAt: number | null;
+}
+
+/**
+ * Page-level metadata produced while resolving props; every key is omitted
+ * when empty.
+ */
+export interface PropsMetadata {
+  sharedProps?: string[];
+  mergeProps?: string[];
+  prependProps?: string[];
+  deepMergeProps?: string[];
+  matchPropsOn?: string[];
+  deferredProps?: Record<string, string[]>;
+  rescuedProps?: string[];
+  scrollProps?: Record<string, ScrollMetadata & { reset: boolean }>;
+  onceProps?: Record<string, OnceMetadata>;
+}
+
+/**
+ * Callback invoked when a rescued prop throws during resolution.
+ *
+ * @param error The thrown value.
+ * @param path Dotted path of the prop that failed.
+ */
+export type RescueHandler = (error: unknown, path: string) => void;
 
 /**
  * Per-response overrides for history-related page flags.
@@ -132,6 +138,10 @@ export interface RenderOptions {
    * Override `encryptHistory` for this response.
    */
   encryptHistory?: boolean;
+  /**
+   * Override `preserveFragment` for this response.
+   */
+  preserveFragment?: boolean;
 }
 
 /**
@@ -146,6 +156,16 @@ export interface InertiaRequestInfo {
   partialExcept: string[] | null;
   errorBag: string | null;
   resetKeys: string[] | null;
+  /**
+   * Once-prop keys the client already holds (`X-Inertia-Except-Once-Props`);
+   * `[]` when the header is absent.
+   */
+  exceptOnceProps: string[];
+  /**
+   * Infinite-scroll merge direction (`X-Inertia-Infinite-Scroll-Merge-Intent`);
+   * `'prepend'` only on that exact value, otherwise `'append'`.
+   */
+  mergeIntent: 'append' | 'prepend';
   method: string;
   url: string;
 }
