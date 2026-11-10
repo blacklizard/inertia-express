@@ -13,6 +13,11 @@ export type {
   DeferProp,
   InertiaPage,
   InertiaRequestInfo,
+  LiveChannel,
+  LiveChannelType,
+  LiveListener,
+  LiveMetadata,
+  LiveProp,
   MergeProp,
   OnceMetadata,
   OnceProp,
@@ -33,6 +38,7 @@ export type {
 // import path for typical apps.
 export {
   always,
+  broadcastProps,
   canonicalStringify,
   computeSsrCacheKey,
   deepMerge,
@@ -41,10 +47,12 @@ export {
   INERTIA_LOCATION_STATUS,
   INERTIA_REDIRECT_STATUS,
   isPropDescriptor,
+  live,
   merge,
   once,
   optional,
   PropDescriptor,
+  resolveBroadcastProps,
   scroll,
 } from '../core/index.js';
 export type { ErrorPageInput } from '../core/index.js';

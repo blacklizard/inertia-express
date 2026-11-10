@@ -623,6 +623,18 @@ describe("inertia middleware", () => {
     expect(r.status).toBe(500);
     expect(r.text).toBe("caught:shared boom");
   });
+
+  it("parses X-Socket-Id into req.inertia.socketId", async () => {
+    const app = buildApp();
+    const seen: Array<string | null | undefined> = [];
+    app.get("/", (req, res) => {
+      seen.push(req.inertia?.socketId);
+      void res.inertia("X", {});
+    });
+    await request(app).get("/").set("x-inertia", "true").set("x-socket-id", "123.456");
+    await request(app).get("/").set("x-inertia", "true");
+    expect(seen).toEqual(["123.456", null]);
+  });
 });
 
 describe("res.inertiaError", () => {

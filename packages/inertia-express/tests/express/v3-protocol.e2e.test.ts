@@ -7,7 +7,7 @@
 import express from "express";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
-import { always, deepMerge, defer, inertia, merge, once, optional } from "../../src/express/index.js";
+import { always, broadcastProps, deepMerge, defer, inertia, live, merge, once, optional } from "../../src/express/index.js";
 import { queryRequest } from "./support/query-request.js";
 
 function buildApp(opts: Parameters<typeof inertia>[0] = {}) {
@@ -425,6 +425,44 @@ describe("v3 protocol conformance", () => {
       const vary = String(r.headers.vary).toLowerCase();
       expect(vary.match(/accept/g)).toHaveLength(1);
       expect(vary.match(/x-inertia/g)).toHaveLength(1);
+    });
+  });
+
+  describe("live props", () => {
+    it("emits liveProps for a live prop and keeps only the requested one on a partial reload", async () => {
+      const app = buildApp();
+      app.get(
+        "/dashboard",
+        (_req, res) =>
+          void res.inertia("Dashboard", {
+            order: live(() => "bar", { on: "OrderUpdated", channel: { name: "orders.1", type: "private" } }),
+            metrics: live(() => 1, { on: "MetricsUpdated", channel: "metrics", throttle: 250 }),
+          }),
+      );
+      const full = await request(app).get("/dashboard").set("x-inertia", "true");
+      const body = JSON.parse(full.text);
+      expect(body.liveProps).toEqual({
+        order: {
+          listeners: [{ channel: { name: "orders.1", type: "private" }, events: ["OrderUpdated"] }],
+        },
+        metrics: {
+          listeners: [{ channel: { name: "metrics", type: "public" }, events: ["MetricsUpdated"] }],
+          throttle: 250,
+        },
+      });
+
+      const partial = await request(app)
+        .get("/dashboard")
+        .set("x-inertia", "true")
+        .set("x-inertia-partial-component", "Dashboard")
+        .set("x-inertia-partial-data", "metrics");
+      expect(Object.keys(JSON.parse(partial.text).liveProps)).toEqual(["metrics"]);
+    });
+
+    it("broadcastProps from the express entry returns the socket envelope", async () => {
+      await expect(broadcastProps({ order: () => ({ id: 1 }) })).resolves.toEqual({
+        __inertia: { props: { order: { id: 1 } } },
+      });
     });
   });
 });
