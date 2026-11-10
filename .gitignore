@@ -286,3 +286,7 @@ Temporary Items
 .idea
 .claude
 .playwright-mcp/
+
+tasks
+superpowers*
+.superpowers/
