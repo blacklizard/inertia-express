@@ -19,6 +19,7 @@ export const INERTIA_HEADERS = {
   exceptOnceProps: 'x-inertia-except-once-props',
   mergeIntent: 'x-inertia-infinite-scroll-merge-intent',
   redirect: 'x-inertia-redirect',
+  socketId: 'x-socket-id',
 } as const;
 
 /**
@@ -100,6 +101,7 @@ export function parseInertiaRequest(input: { headers: HeaderRecord; method: stri
     exceptOnceProps,
     mergeIntent,
     isPrefetch: PREFETCH_HEADERS.some((name) => readHeader(headers, name)?.toLowerCase() === 'prefetch'),
+    socketId: readHeader(headers, INERTIA_HEADERS.socketId),
     method: input.method.toUpperCase(),
     url: input.url,
   };

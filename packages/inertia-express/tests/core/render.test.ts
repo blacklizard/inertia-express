@@ -14,6 +14,7 @@ const baseRequest: InertiaRequestInfo = {
   exceptOnceProps: [],
   mergeIntent: "append",
   isPrefetch: false,
+  socketId: null,
   method: "GET",
   url: "/x",
 };

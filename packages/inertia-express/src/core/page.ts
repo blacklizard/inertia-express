@@ -33,6 +33,7 @@ const METADATA_KEYS = [
   'rescuedProps',
   'scrollProps',
   'onceProps',
+  'liveProps',
 ] as const satisfies readonly (keyof PropsMetadata)[];
 
 /**

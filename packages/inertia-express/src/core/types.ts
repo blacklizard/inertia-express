@@ -75,6 +75,10 @@ export interface InertiaPage<TProps extends PageProps = PageProps> {
    * `Response::resolveFlashData`. Omitted entirely when there is no flash.
    */
   flash?: unknown;
+  /**
+   * v3 live props: per-prop realtime channel listeners, keyed by prop path.
+   */
+  liveProps?: Record<string, LiveMetadata>;
 }
 
 /**
@@ -103,6 +107,44 @@ export interface OnceMetadata {
 }
 
 /**
+ * Broadcast channel visibility: `public`, `private`, `presence`, or
+ * `encrypted-private`.
+ */
+export type LiveChannelType = 'public' | 'private' | 'presence' | 'encrypted-private';
+
+/**
+ * A named realtime channel a live prop subscribes to.
+ */
+export interface LiveChannel {
+  /** Channel name as known to the realtime broadcaster. */
+  name: string;
+  /** Visibility of the channel. */
+  type: LiveChannelType;
+}
+
+/**
+ * One channel subscription for a live prop: the channel and the event names
+ * that trigger a refresh.
+ */
+export interface LiveListener {
+  /** Channel to subscribe to. */
+  channel: LiveChannel;
+  /** Event names on the channel that trigger a refresh of the prop. */
+  events: string[];
+}
+
+/**
+ * Live-prop metadata for one prop path: its listeners and an optional refresh
+ * throttle in milliseconds.
+ */
+export interface LiveMetadata {
+  /** Channel subscriptions for this prop. */
+  listeners: LiveListener[];
+  /** Minimum milliseconds between refreshes of this prop, when set. */
+  throttle?: number;
+}
+
+/**
  * Page-level metadata produced while resolving props; every key is omitted
  * when empty.
  */
@@ -116,6 +158,7 @@ export interface PropsMetadata {
   rescuedProps?: string[];
   scrollProps?: Record<string, ScrollMetadata & { reset: boolean }>;
   onceProps?: Record<string, OnceMetadata>;
+  liveProps?: Record<string, LiveMetadata>;
 }
 
 /**
@@ -174,6 +217,11 @@ export interface InertiaRequestInfo {
    * (case-insensitive).
    */
   isPrefetch: boolean;
+  /**
+   * Socket id from `X-Socket-Id`, or `null` when absent. The adapter only
+   * parses it; live-prop code consumes it.
+   */
+  socketId: string | null;
   method: string;
   url: string;
 }

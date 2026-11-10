@@ -143,4 +143,11 @@ describe("once and infinite-scroll headers", () => {
     expect(INERTIA_HEADERS.redirect).toBe("x-inertia-redirect");
     expect(PREFETCH_HEADERS).toEqual(["purpose", "sec-purpose", "x-moz"]);
   });
+
+  it("parses the socket id", () => {
+    const info = parseInertiaRequest({ headers: { "x-inertia": "true", "x-socket-id": "123.456" }, method: "GET", url: "/" });
+    expect(info.socketId).toBe("123.456");
+    expect(parseInertiaRequest({ headers: {}, method: "GET", url: "/" }).socketId).toBeNull();
+    expect(INERTIA_HEADERS.socketId).toBe("x-socket-id");
+  });
 });

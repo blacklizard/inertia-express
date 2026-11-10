@@ -83,4 +83,10 @@ describe("createPage", () => {
     expect(p.clearHistory).toBe(true);
     expect(p.encryptHistory).toBe(true);
   });
+
+  it("copies liveProps from metadata and drops it when empty", () => {
+    const live = { order: { listeners: [{ channel: { name: "orders", type: "public" as const }, events: ["order.updated"] }] } };
+    expect(createPage({ ...base, metadata: { liveProps: live } }).liveProps).toEqual(live);
+    expect(createPage({ ...base, metadata: { liveProps: {} } })).not.toHaveProperty("liveProps");
+  });
 });

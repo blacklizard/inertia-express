@@ -17,6 +17,7 @@ export function makeRequest(overrides: Partial<InertiaRequestInfo> = {}): Inerti
     exceptOnceProps: [],
     mergeIntent: "append",
     isPrefetch: false,
+    socketId: null,
     method: "GET",
     url: "/",
     ...overrides,
