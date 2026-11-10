@@ -14,7 +14,13 @@ export * from './html.js';
 export * from './page.js';
 export * from './partial-filter.js';
 export { default as PropDescriptor } from './prop-descriptor.js';
-export type { PropKind, PropSource, ScrollOptions } from './prop-descriptor.js';
+export type {
+  LiveChannelInput,
+  LiveOptions,
+  PropKind,
+  PropSource,
+  ScrollOptions,
+} from './prop-descriptor.js';
 export * from './props.js';
 export { default as PropsResolver } from './props-resolver.js';
 export * from './props-resolver.js';

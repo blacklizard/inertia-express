@@ -7,6 +7,7 @@
 import express from "express";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
+import type { LiveOptions } from "../../src/express/index.js";
 import { always, broadcastProps, deepMerge, defer, inertia, live, merge, once, optional } from "../../src/express/index.js";
 import { queryRequest } from "./support/query-request.js";
 
@@ -431,11 +432,12 @@ describe("v3 protocol conformance", () => {
   describe("live props", () => {
     it("emits liveProps for a live prop and keeps only the requested one on a partial reload", async () => {
       const app = buildApp();
+      const orderLive: LiveOptions = { on: "OrderUpdated", channel: { name: "orders.1", type: "private" } };
       app.get(
         "/dashboard",
         (_req, res) =>
           void res.inertia("Dashboard", {
-            order: live(() => "bar", { on: "OrderUpdated", channel: { name: "orders.1", type: "private" } }),
+            order: live(() => "bar", orderLive),
             metrics: live(() => 1, { on: "MetricsUpdated", channel: "metrics", throttle: 250 }),
           }),
       );
