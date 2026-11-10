@@ -10,4 +10,4 @@ Port inertia-laravel 3.x live props.
 - `req.inertia.socketId` carries the `X-Socket-Id` request header (`null` when absent), and `INERTIA_HEADERS.socketId` is `"x-socket-id"`.
 - New exported types: `LiveProp`, `LiveOptions`, `LiveChannelInput`, `LiveChannel`, `LiveChannelType`, `LiveListener`, `LiveMetadata`; `InertiaPage` and `PropsMetadata` gain an optional `liveProps`.
 
-`InertiaRequestInfo` gains a required `socketId: string | null`, so code that builds request-info literals by hand must add it, as with `isPrefetch` before it.
+`InertiaRequestInfo` gains a required `socketId: string | null`, so code that builds request-info literals by hand must add it, as with `isPrefetch` in this release.

@@ -289,7 +289,10 @@ app.get("/leads", async (req, res) => {
 });
 
 // After a lead changes (Socket.IO shown)
-io.to("leads").emit("inertia:props", await broadcastProps({ leads: () => loadLeads() }));
+// The client subscribes to the declared event on the declared channel.
+io.to("leads")
+  .except(req.inertia?.socketId ?? [])
+  .emit("LeadUpdated", await broadcastProps({ leads: () => loadLeads() }));
 ```
 
 Laravel: `Inertia::live()` / `->live()`

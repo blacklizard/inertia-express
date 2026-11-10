@@ -238,7 +238,7 @@ Throws:
 
 - `TypeError` at declaration when a channel's `type` is not `"public"`, `"private"`, `"presence"` or `"encrypted-private"`.
 - `Error("Live updates are not supported on merge properties.")` when `.live()` is called on a merging prop (`.merge()`, `.deepMerge()` or `scroll()`), or `.merge()` on a live prop.
-- At render, `Error("A live property must listen for at least one event.")` when no declaration has events, and `Error("Unable to resolve the channels for the [event] event. Pass the [channel] option.")` when a declaration has events but no channels. These are not rescued.
+- At render, `Error("A live property must listen for at least one event. Pass the event to the [on] option.")` when no declaration has events, and `Error("Unable to resolve the channels for the [event] event. Pass the [channel] option.")` when a declaration has events but no channels. These are not rescued.
 
 A channel given as `{ name, type }` has its broadcaster prefix stripped for its own type (`private-`, `presence-`, `private-encrypted-`); a `public` channel keeps its name as given.
 
@@ -268,7 +268,10 @@ resolveBroadcastProps(props: PageProps, onRescue?: RescueHandler): Promise<PageP
 The adapter does not open sockets; send the payload with your own realtime server. See [Broadcasting live props](/core/props#broadcasting-live-props).
 
 ```ts
-io.to("leads").emit("inertia:props", await broadcastProps({ leads: () => loadLeads() }));
+// The client subscribes to the declared event on the declared channel.
+io.to("leads")
+  .except(req.inertia?.socketId ?? [])
+  .emit("LeadUpdated", await broadcastProps({ leads: () => loadLeads() }));
 ```
 
 ---

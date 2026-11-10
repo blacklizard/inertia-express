@@ -285,6 +285,8 @@ order: live(() => loadOrder(id), { on: "OrderUpdated", channel: { name: `orders.
   .live({ on: "OrderShipped", channel: "shipments" }),
 ```
 
+Build live descriptors inside the handler: calling `.live()` on a hoisted descriptor on every request appends a declaration each time, so per-user channels from earlier requests leak into later pages. See [Descriptors are per-request values](#descriptors-are-per-request-values).
+
 ### Channels
 
 - A bare string channel is public, whether it is given alone or in a list.
@@ -317,7 +319,7 @@ When metadata is emitted:
 - **Rescued props:** a rescued live prop is still listed on the initial load, but not on the partial reload where its producer threw.
 - `liveProps` is omitted when no prop on the page is live.
 
-Rendering throws when a live prop has no events (`A live property must listen for at least one event.`) or an event has no channel (`Unable to resolve the channels for the [event] event. Pass the [channel] option.`). These errors are not rescued, even on a `.rescue()` prop.
+Rendering throws when a live prop has no events (`A live property must listen for at least one event. Pass the event to the [on] option.`) or an event has no channel (`Unable to resolve the channels for the [event] event. Pass the [channel] option.`). These errors are not rescued, even on a `.rescue()` prop.
 
 ### Broadcasting live props
 
@@ -331,7 +333,10 @@ res.inertia("Leads/Index", {
 });
 
 // Elsewhere, after a lead changes (Socket.IO shown; the adapter does not open sockets)
-io.to("leads").emit("inertia:props", await broadcastProps({ leads: () => loadLeads() }));
+// The client subscribes to the declared event on the declared channel.
+io.to("leads")
+  .except(req.inertia?.socketId ?? [])
+  .emit("LeadUpdated", await broadcastProps({ leads: () => loadLeads() }));
 ```
 
 - Every prop is resolved: there is no partial filtering, and `optional`, `defer`, `once`, `always` and `live` props all resolve to their values.
@@ -341,6 +346,14 @@ io.to("leads").emit("inertia:props", await broadcastProps({ leads: () => loadLea
 - Siblings resolve concurrently, and the output keeps insertion order. Payload objects are plain objects.
 
 The middleware parses the `X-Socket-Id` request header into `req.inertia.socketId` (`null` when absent). The adapter does nothing else with it; a socket server can use it to skip the client that triggered the change.
+
+#### What the client expects
+
+- Event transports subscribe per channel and declared event name, so emit under that name (`LeadUpdated` above).
+- A channel transport reads the event from `__inertia.event`, so add it yourself: `{ __inertia: { ...payload.__inertia, event: "LeadUpdated" } }`.
+- The client writes only keys equal to a `liveProps` path (a nested live prop needs `{ "order.total": … }`); anything else triggers a reload of the subscribed props.
+- To let the client drop its own echo when the broadcaster cannot exclude a connection, add `socketId` (from `req.inertia.socketId`) to `__inertia`.
+- The adapter opens no sockets, and `broadcastProps` returns only `{ __inertia: { props } }`, as Laravel's does.
 
 ## Descriptors are per-request values
 
