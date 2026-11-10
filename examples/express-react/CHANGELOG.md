@@ -4,7 +4,7 @@
 
 ### Patch Changes
 
-- Updated dependencies [255c323]
+- Updated dependencies [74fe76b]
   - @blacklizard/inertia-express@3.0.0
 
 ## 1.0.4

@@ -4,7 +4,7 @@
 
 ### Major Changes
 
-- 255c323: Port inertia-laravel's prop model and `PropsResolver`. Props are now plain values, bare closures, or chainable descriptors built by `optional`, `defer` (with `.rescue()`), `always`, `merge` / `deepMerge` (with `.append`, `.prepend`, `.matchOn`), `once` (with `.as`, `.until`, `.fresh`) and the new `scroll`. A single resolver, ported from Laravel, evaluates them and emits the page metadata (`deferredProps`, `mergeProps`, `prependProps`, `deepMergeProps`, `matchPropsOn`, `onceProps`, `scrollProps`, `rescuedProps`), including dotted-path partial reloads. New options: `onRescue` on the middleware and `preserveFragment` on `res.inertia()`.
+- 74fe76b: Port inertia-laravel's prop model and `PropsResolver`. Props are now plain values, bare closures, or chainable descriptors built by `optional`, `defer` (with `.rescue()`), `always`, `merge` / `deepMerge` (with `.append`, `.prepend`, `.matchOn`), `once` (with `.as`, `.until`, `.fresh`) and the new `scroll`. A single resolver, ported from Laravel, evaluates them and emits the page metadata (`deferredProps`, `mergeProps`, `prependProps`, `deepMergeProps`, `matchPropsOn`, `onceProps`, `scrollProps`, `rescuedProps`), including dotted-path partial reloads. New options: `onRescue` on the middleware and `preserveFragment` on `res.inertia()`.
 
   Migrating from 2.x:
 
