@@ -43,7 +43,7 @@
     "prepublishOnly": "pnpm clean && pnpm build && pnpm test"
   },
   "peerDependencies": {
-    "@blacklizard/inertia-express": "workspace:*",
+    "@blacklizard/inertia-express": "workspace:^",
     "redis": "^4.6.0 || ^5.0.0"
   },
   "devDependencies": {
