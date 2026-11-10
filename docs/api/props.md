@@ -27,6 +27,7 @@ Throws `TypeError` when `fn` is not a function.
 | `.as(key: string)` | `OptionalProp<T>` |
 | `.until(delay: number \| Date)` | `OptionalProp<T>` |
 | `.fresh(value?: boolean)` | `OptionalProp<T>` |
+| `.live(options: LiveOptions)` | `OptionalProp<T>` |
 
 ```ts
 await res.inertia("Dashboard", {
@@ -57,6 +58,7 @@ defer<T>(fn: () => T | Promise<T>, group?: string): DeferProp<T>
 | `.matchOn(path: string \| string[])` | `DeferProp<T>` |
 | `.once(value?, as?, until?)`, `.as(key)`, `.until(delay)`, `.fresh(value?)` | `DeferProp<T>` |
 | `.rescue(value?: boolean)` | `DeferProp<T>` |
+| `.live(options: LiveOptions)` | `DeferProp<T>` |
 
 `.rescue()` drops the prop from the response when its producer throws, lists its path in `rescuedProps`, and calls the middleware's [`onRescue`](/api/middleware#inertiamiddlewareoptions) hook.
 
@@ -73,11 +75,15 @@ await res.inertia("Dashboard", {
 
 ## `always(value)`
 
-Included on every response — full visits **and** partial reloads — regardless of `X-Inertia-Partial-Data` / `X-Inertia-Partial-Except` filtering. Accepts a plain value or a function. No chain methods.
+Included on every response — full visits **and** partial reloads — regardless of `X-Inertia-Partial-Data` / `X-Inertia-Partial-Except` filtering. Accepts a plain value or a function.
 
 ```ts
 always<T>(value: PropSource<T>): AlwaysProp<T>
 ```
+
+| Chain | Returns |
+|-------|---------|
+| `.live(options: LiveOptions)` | `AlwaysProp<T>` |
 
 ```ts
 await res.inertia("Dashboard", {
@@ -164,6 +170,7 @@ Throws `TypeError` when `fn` is not a function.
 | `.as(key: string)` | `OnceProp<T>` | Cache key (default: the prop path) |
 | `.until(delay: number \| Date)` | `OnceProp<T>` | Expiry: **seconds** from now, or an absolute `Date`. The last call wins. |
 | `.fresh(value?: boolean)` | `OnceProp<T>` | Force re-resolution on this response (default `true`) |
+| `.live(options: LiveOptions)` | `OnceProp<T>` | Declare live updates; see [`live`](#live-value-options) |
 
 ```ts
 await res.inertia("Settings", {
@@ -205,6 +212,67 @@ await res.inertia("Posts", {
 
 ---
 
+## `live(value, options)`
+
+A prop the client refreshes when one of the given realtime events arrives. It resolves like a plain prop or bare closure (included on the initial visit, filtered by partial reloads) and its listeners are emitted in `liveProps`. Accepts a plain value or a function. See [Live props](/core/props#live-props).
+
+```ts
+live<T>(value: PropSource<T>, options: LiveOptions): LiveProp<T>
+
+interface LiveOptions {
+  on: string | string[];                          // event name(s)
+  channel: LiveChannelInput | LiveChannelInput[]; // channel(s) the events arrive on
+  throttle?: number;                              // minimum milliseconds between refreshes
+}
+
+type LiveChannelInput = string | LiveChannel;     // a bare string is a public channel
+```
+
+| Chain | Returns |
+|-------|---------|
+| `.live(options: LiveOptions)` | `LiveProp<T>` |
+
+`.live(options)` is also a chain method of `always`, `optional`, `defer` and `once`. Each call adds a declaration pairing its events with its channels; a later `throttle` replaces an earlier one.
+
+Throws:
+
+- `TypeError` at declaration when a channel's `type` is not `"public"`, `"private"`, `"presence"` or `"encrypted-private"`.
+- `Error("Live updates are not supported on merge properties.")` when `.live()` is called on a merging prop (`.merge()`, `.deepMerge()` or `scroll()`), or `.merge()` on a live prop.
+- At render, `Error("A live property must listen for at least one event.")` when no declaration has events, and `Error("Unable to resolve the channels for the [event] event. Pass the [channel] option.")` when a declaration has events but no channels. These are not rescued.
+
+A channel given as `{ name, type }` has its broadcaster prefix stripped for its own type (`private-`, `presence-`, `private-encrypted-`); a `public` channel keeps its name as given.
+
+```ts
+await res.inertia("Orders/Show", {
+  order: live(() => loadOrder(id), { on: "OrderUpdated", channel: { name: `orders.${id}`, type: "private" } }),
+  stats: defer(() => loadStats()).live({ on: "OrderUpdated", channel: "stats", throttle: 1000 }),
+});
+```
+
+---
+
+## `broadcastProps(props, onRescue?)` / `resolveBroadcastProps(props, onRescue?)`
+
+Resolve props for a realtime broadcast payload. `broadcastProps` returns the `{ __inertia: { props } }` envelope; `resolveBroadcastProps` returns the bare props map. Neither takes a request: closures are called with no arguments.
+
+```ts
+broadcastProps(props: PageProps, onRescue?: RescueHandler): Promise<{ __inertia: { props: PageProps } }>
+resolveBroadcastProps(props: PageProps, onRescue?: RescueHandler): Promise<PageProps>
+```
+
+- Every prop is resolved, whatever its kind: no partial filtering and no `once` / `defer` / `optional` exclusion.
+- One level of descriptor returned from a closure is unwrapped.
+- Rescued props that throw are omitted and reported to `onRescue(error, path)` (`console.error` without it); other errors reject.
+- Dotted keys stay literal, siblings resolve concurrently in insertion order, and the result contains plain objects.
+
+The adapter does not open sockets; send the payload with your own realtime server. See [Broadcasting live props](/core/props#broadcasting-live-props).
+
+```ts
+io.to("leads").emit("inertia:props", await broadcastProps({ leads: () => loadLeads() }));
+```
+
+---
+
 ## `isPropDescriptor(value)`
 
 Type guard: `true` when `value` is a `PropDescriptor` built by any constructor above.
@@ -225,6 +293,7 @@ interface OptionalProp<T> {
   as: (key: string) => OptionalProp<T>;
   until: (delay: number | Date) => OptionalProp<T>;
   fresh: (value?: boolean) => OptionalProp<T>;
+  live: (options: LiveOptions) => OptionalProp<T>;
 }
 
 interface DeferProp<T> {
@@ -238,6 +307,7 @@ interface DeferProp<T> {
   until: (delay: number | Date) => DeferProp<T>;
   fresh: (value?: boolean) => DeferProp<T>;
   rescue: (value?: boolean) => DeferProp<T>;
+  live: (options: LiveOptions) => DeferProp<T>;
 }
 
 interface MergeProp<T> {
@@ -251,12 +321,19 @@ interface MergeProp<T> {
   fresh: (value?: boolean) => MergeProp<T>;
 }
 
-type AlwaysProp<T> = Pick<PropDescriptor<T>, never>; // no chain methods
+interface AlwaysProp<T> {
+  live: (options: LiveOptions) => AlwaysProp<T>;
+}
+
+interface LiveProp<T> {
+  live: (options: LiveOptions) => LiveProp<T>;
+}
 
 interface OnceProp<T> {
   as: (key: string) => OnceProp<T>;
   until: (delay: number | Date) => OnceProp<T>;
   fresh: (value?: boolean) => OnceProp<T>;
+  live: (options: LiveOptions) => OnceProp<T>;
 }
 
 interface ScrollProp<T> {
@@ -273,7 +350,7 @@ The class behind every helper, a port of inertia-laravel's prop classes. Exporte
 
 ```ts
 class PropDescriptor<T = unknown> {
-  readonly kind: "optional" | "defer" | "always" | "merge" | "once" | "scroll";
+  readonly kind: "optional" | "defer" | "always" | "merge" | "once" | "scroll" | "live";
   readonly source: PropSource<T>;
 
   merge(): this;
@@ -287,12 +364,15 @@ class PropDescriptor<T = unknown> {
   until(delay: number | Date): this;
   fresh(value?: boolean): this;
   rescue(value?: boolean): this;
+  live(options: LiveOptions): this;
+  liveListeners(): LiveListener[];
+  get isLive(): boolean;
   expiresAt(now?: number): number | null;
   resolveSource(): Promise<T>;
 }
 ```
 
-It also carries the public flags the resolver reads (`ignoreFirstLoad`, `defers`, `group`, `merges`, `deep`, `appends`, `appendPaths`, `prependPaths`, `matchOnPaths`, `resolvesOnce`, `onceKey`, `ttlSeconds`, `expiresAtDate`, `isFresh`, `rescues`, `isAlways`, `isScroll`, `wrapper`, `scrollMetadata`).
+It also carries the public flags the resolver reads (`ignoreFirstLoad`, `defers`, `group`, `merges`, `deep`, `appends`, `appendPaths`, `prependPaths`, `matchOnPaths`, `resolvesOnce`, `onceKey`, `ttlSeconds`, `expiresAtDate`, `isFresh`, `rescues`, `isAlways`, `isScroll`, `wrapper`, `scrollMetadata`, `liveDeclarations`, `liveThrottle`).
 
 ---
 
@@ -336,6 +416,7 @@ const { props, metadata } = await resolveProps({
 // metadata.rescuedProps   — ["feed"] — rescued deferred props
 // metadata.scrollProps    — { posts: { pageName, previousPage, nextPage, currentPage, reset } }
 // metadata.onceProps      — { plans: { prop: "plans", expiresAt: 1767225600000 } }
+// metadata.liveProps      — { order: { listeners: [{ channel: { name: "orders.1", type: "private" }, events: ["OrderUpdated"] }] } }
 ```
 
 See [`PropsMetadata`](/api/types#propsmetadata) for the full type.

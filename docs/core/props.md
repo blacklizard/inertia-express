@@ -3,7 +3,7 @@
 Props control what data reaches the client component and when. Every prop value is either a plain value, a bare closure, or a **descriptor** built by one of the helper constructors below. Descriptors are chainable and mirror inertia-laravel's prop classes; the resolver is a port of its `PropsResolver`.
 
 ```ts
-import { always, deepMerge, defer, merge, once, optional, scroll } from "@blacklizard/inertia-express";
+import { always, deepMerge, defer, live, merge, once, optional, scroll } from "@blacklizard/inertia-express";
 ```
 
 ## Plain props
@@ -53,7 +53,7 @@ await res.inertia("Users/Show", {
 });
 ```
 
-**Chains:** `.once()`, `.as()`, `.until()`, `.fresh()` — see [`once`](#once-fn).
+**Chains:** `.once()`, `.as()`, `.until()`, `.fresh()` — see [`once`](#once-fn) — and `.live()` (see [Live props](#live-props)).
 
 **When to use:** Expensive data that the page doesn't need on first load but may request later.
 
@@ -79,7 +79,7 @@ await res.inertia("Dashboard", {
 
 Props in the same group are fetched in one batch request.
 
-**Chains:** `.merge()`, `.deepMerge()`, `.append()`, `.prepend()`, `.matchOn()` (see [Merge props](#merge-props)), `.once()`, `.as()`, `.until()`, `.fresh()` (see [`once`](#once-fn)), and `.rescue()`.
+**Chains:** `.merge()`, `.deepMerge()`, `.append()`, `.prepend()`, `.matchOn()` (see [Merge props](#merge-props)), `.once()`, `.as()`, `.until()`, `.fresh()` (see [`once`](#once-fn)), `.rescue()`, and `.live()` (see [Live props](#live-props)).
 
 ```ts
 await res.inertia("Feed", {
@@ -104,7 +104,7 @@ Errors thrown by the `onRescue` hook itself (or a rejected promise it returns) a
 
 ## `always(value)`
 
-Always props are included on **every** response — full visits and partial reloads alike — regardless of `X-Inertia-Partial-Data` / `X-Inertia-Partial-Except` filtering. Takes a plain value or a function. It has no chain methods.
+Always props are included on **every** response — full visits and partial reloads alike — regardless of `X-Inertia-Partial-Data` / `X-Inertia-Partial-Except` filtering. Takes a plain value or a function. Its only chain method is `.live()` (see [Live props](#live-props)).
 
 ```ts
 import { always } from "@blacklizard/inertia-express";
@@ -210,6 +210,7 @@ app.get("/settings", async (req, res) => {
 | `.as(key)` | Cache key the client stores the value under (default: the prop path). Shareable across pages. |
 | `.until(delay)` | Expiry: a number of **seconds** from now, or an absolute `Date`. The last `.until()` call wins. |
 | `.fresh(value = true)` | Force re-resolution on this response even if the client holds the value. |
+| `.live(options)` | Declare live updates; see [Live props](#live-props). |
 
 Every once prop is listed in the page object's `onceProps`, keyed by its once key: `{ [key]: { prop, expiresAt } }`, where `prop` is the prop path and `expiresAt` is a millisecond epoch timestamp or `null` when it never expires.
 
@@ -248,6 +249,98 @@ app.get("/posts", async (req, res) => {
 The page object gets `scrollProps: { [path]: { pageName, previousPage, nextPage, currentPage, reset } }`; `reset` is `true` when the client listed the prop in `X-Inertia-Reset`. The merge direction follows the client's `X-Inertia-Infinite-Scroll-Merge-Intent` header: `prepend` emits the wrapper path under `prependProps`, anything else (or no header) appends under `mergeProps`.
 
 **Chains:** `.defer(group?)` loads the first page in a follow-up request; `.matchOn(path)` dedupes items.
+
+## Live props
+
+A live prop tells the client which realtime channels and events refresh it. The page object lists them in `liveProps`; the client subscribes and refreshes the prop when one of the events arrives. This is a port of inertia-laravel 3.x live props. The adapter only declares the listeners and builds broadcast payloads: it does not open sockets or broadcast events, so the realtime server (Socket.IO, a Pusher-compatible server, or anything else your client listens to) is yours.
+
+### `live(value, options)`
+
+`live()` takes a plain value or a function and resolves like a plain prop or bare closure: it is included on the initial visit, and a partial reload includes it only when the reload requests it.
+
+```ts
+import { defer, live, once } from "@blacklizard/inertia-express";
+
+await res.inertia("Leads/Index", {
+  leads: live(() => loadLeads(), { on: "LeadUpdated", channel: { name: "leads", type: "private" } }),
+  stats: defer(() => loadStats()).live({ on: ["LeadCreated", "LeadUpdated"], channel: "stats", throttle: 1000 }),
+  owners: once(() => loadOwners()).live({ on: "OwnerChanged", channel: "owners" }),
+});
+```
+
+| Option | Type | Effect |
+|--------|------|--------|
+| `on` | `string \| string[]` | Event name or names that refresh the prop. |
+| `channel` | `string \| LiveChannel \| (string \| LiveChannel)[]` | Channel or channels the events arrive on. A bare string is a **public** channel; `{ name, type }` sets the type (`"public"`, `"private"`, `"presence"` or `"encrypted-private"`). |
+| `throttle` | `number` (optional) | Minimum milliseconds between refreshes, sent as `throttle`. |
+
+### `.live(options)`
+
+`always`, `optional`, `defer` and `once` descriptors accept `.live(options)` with the same options. A merging prop cannot be live: `merge()`, `deepMerge()` and `scroll()` descriptors have no `.live()`, and calling it on any merging prop at runtime (a `scroll` prop, or a `defer` prop after `.merge()` / `.deepMerge()`) throws `Live updates are not supported on merge properties.`, and `.merge()` on a live prop throws the same error.
+
+`.live()` may be called more than once, on a `live()` prop too. Each call pairs its own events with its own channels; declarations do not share channels. A later `throttle` replaces an earlier one, and a call without `throttle` keeps the current value.
+
+```ts
+order: live(() => loadOrder(id), { on: "OrderUpdated", channel: { name: `orders.${id}`, type: "private" } })
+  .live({ on: "OrderShipped", channel: "shipments" }),
+```
+
+### Channels
+
+- A bare string channel is public, whether it is given alone or in a list.
+- An explicit channel's broadcaster prefix is stripped from its name for its own type: `private-` for `private`, `presence-` for `presence`, `private-encrypted-` for `encrypted-private`. A `public` channel keeps a name that looks prefixed (`private-orders.1` stays as given).
+- An unknown `type` throws a `TypeError` when the prop is declared.
+- Events are strings and channels are always explicit; there is no event-class channel lookup as in Laravel. See [Caveats](/guide/caveats#live-props-need-explicit-channels).
+
+### `liveProps` page metadata
+
+Each live prop is listed under its dotted path (`"order.total"` for a live prop nested in a plain object), with one listener per channel and the events for that channel. Events on the same channel collapse into one listener, and duplicate events and channels are removed. `throttle` is present only when set.
+
+```json
+{
+  "liveProps": {
+    "order": {
+      "listeners": [{ "channel": { "name": "orders.1", "type": "private" }, "events": ["OrderUpdated"] }]
+    },
+    "metrics": {
+      "listeners": [{ "channel": { "name": "metrics", "type": "public" }, "events": ["MetricsUpdated"] }],
+      "throttle": 250
+    }
+  }
+}
+```
+
+When metadata is emitted:
+
+- **Initial load:** every live prop is listed, including ones excluded from `props`: an `optional` or `defer` prop that is not sent yet, and a `once` prop the client already holds.
+- **Partial reloads:** only live props the reload includes are listed, plus those that bypass partial filtering (`always` props, and live props nested under a closure or descriptor the response resolves, such as an `always` parent).
+- **Rescued props:** a rescued live prop is still listed on the initial load, but not on the partial reload where its producer threw.
+- `liveProps` is omitted when no prop on the page is live.
+
+Rendering throws when a live prop has no events (`A live property must listen for at least one event.`) or an event has no channel (`Unable to resolve the channels for the [event] event. Pass the [channel] option.`). These errors are not rescued, even on a `.rescue()` prop.
+
+### Broadcasting live props
+
+`broadcastProps(props, onRescue?)` builds the payload your realtime server sends with an event: `{ __inertia: { props } }`. `resolveBroadcastProps(props, onRescue?)` returns the bare `props` map instead. Both are exported from `@blacklizard/inertia-express` and `@blacklizard/inertia-express/core`.
+
+```ts
+import { broadcastProps, live } from "@blacklizard/inertia-express";
+
+res.inertia("Leads/Index", {
+  leads: live(() => loadLeads(), { on: "LeadUpdated", channel: { name: "leads", type: "private" } }),
+});
+
+// Elsewhere, after a lead changes (Socket.IO shown; the adapter does not open sockets)
+io.to("leads").emit("inertia:props", await broadcastProps({ leads: () => loadLeads() }));
+```
+
+- Every prop is resolved: there is no partial filtering, and `optional`, `defer`, `once`, `always` and `live` props all resolve to their values.
+- Closures are called with no arguments, and the helpers take no request. A descriptor returned from a closure is unwrapped.
+- A rescued prop that throws is left out of the payload (a rescued array element is dropped and later items shift down) and reported to `onRescue(error, path)`; without `onRescue` it is logged with `console.error`. An error from a prop that is not rescued rejects the promise.
+- Dotted keys stay literal: `{ "order.total": 125 }` is sent as is, not unpacked into `order.total`.
+- Siblings resolve concurrently, and the output keeps insertion order. Payload objects are plain objects.
+
+The middleware parses the `X-Socket-Id` request header into `req.inertia.socketId` (`null` when absent). The adapter does nothing else with it; a socket server can use it to skip the client that triggered the change.
 
 ## Descriptors are per-request values
 
@@ -293,6 +386,9 @@ await res.inertia("Dashboard", {
 
   // Once — cached by the client for an hour
   plans: once(() => billing.plans()).until(3600),
+
+  // Live — refreshed when OrderUpdated arrives on the private orders channel
+  orders: live(() => db.orders.recent(), { on: "OrderUpdated", channel: { name: "orders", type: "private" } }),
 });
 ```
 
@@ -309,6 +405,7 @@ await res.inertia("Dashboard", {
 | `deepMerge(value)` | ✅ included, full replace | Depends on filter | ✅ deep-merged |
 | `once(fn)` | ✅ evaluated, unless the client already holds it | Depends on filter | ✅ evaluated |
 | `scroll(fn, options)` | ✅ evaluated (❌ with `.defer()`) | Depends on filter | ✅ merged at the wrapper key |
+| `live(value, options)` | ✅ evaluated (listeners in `liveProps`) | Depends on filter | ✅ evaluated (listeners in `liveProps`) |
 
 ## Migrating from 2.x
 

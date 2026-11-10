@@ -24,6 +24,7 @@ interface InertiaPage<TProps extends PageProps = PageProps> {
   rescuedProps?: string[];                   // deferred props whose producer threw and was rescued
   scrollProps?: Record<string, ScrollMetadata & { reset: boolean }>; // keyed by prop path
   onceProps?: Record<string, OnceMetadata>;  // keyed by once key
+  liveProps?: Record<string, LiveMetadata>;  // keyed by prop path
   flash?: unknown;                           // read-once flash data (top-level, not a prop)
 }
 ```
@@ -44,6 +45,7 @@ interface InertiaRequestInfo {
   exceptOnceProps: string[];          // X-Inertia-Except-Once-Props; [] when absent
   mergeIntent: "append" | "prepend";  // X-Inertia-Infinite-Scroll-Merge-Intent; "prepend" only on that exact value
   isPrefetch: boolean;                // true when Purpose, Sec-Purpose or X-Moz is "prefetch" (case-insensitive)
+  socketId: string | null;            // X-Socket-Id; null when absent
   method: string;
   url: string;
 }
@@ -73,6 +75,49 @@ interface OnceMetadata {
 }
 ```
 
+### `LiveChannelType`
+
+Visibility of a [live prop](/api/props#live-value-options) channel.
+
+```ts
+type LiveChannelType = "public" | "private" | "presence" | "encrypted-private";
+```
+
+### `LiveChannel`
+
+A realtime channel a live prop subscribes to. The name never carries the broadcaster's type prefix.
+
+```ts
+interface LiveChannel {
+  name: string;
+  type: LiveChannelType;
+}
+```
+
+`LiveChannelInput` (`string | LiveChannel`) and `LiveOptions` are documented with [`live()`](/api/props#live-value-options).
+
+### `LiveListener`
+
+One channel subscription of a live prop: the channel and the deduplicated event names that refresh the prop.
+
+```ts
+interface LiveListener {
+  channel: LiveChannel;
+  events: string[];
+}
+```
+
+### `LiveMetadata`
+
+Metadata for one live prop in the page object's `liveProps`. `throttle` (milliseconds) is present only when set.
+
+```ts
+interface LiveMetadata {
+  listeners: LiveListener[];
+  throttle?: number;
+}
+```
+
 ### `PropsMetadata`
 
 Page-level metadata produced by [`resolveProps`](/api/props#resolveprops-input-core); every key is omitted when empty.
@@ -88,12 +133,13 @@ interface PropsMetadata {
   rescuedProps?: string[];
   scrollProps?: Record<string, ScrollMetadata & { reset: boolean }>;
   onceProps?: Record<string, OnceMetadata>;
+  liveProps?: Record<string, LiveMetadata>;
 }
 ```
 
 ### `RescueHandler`
 
-Core-level rescue hook passed to `resolveProps`. The Express middleware's [`onRescue`](/api/middleware#inertiamiddlewareoptions) option adds the request as a third argument. A synchronous throw or rejected promise from the hook is logged with `console.error` and never propagated.
+Core-level rescue hook passed to `resolveProps`, `broadcastProps` and `resolveBroadcastProps`. The Express middleware's [`onRescue`](/api/middleware#inertiamiddlewareoptions) option adds the request as a third argument. A synchronous throw or rejected promise from the hook is logged with `console.error` and never propagated.
 
 ```ts
 type RescueHandler = (error: unknown, path: string) => void;
@@ -101,7 +147,7 @@ type RescueHandler = (error: unknown, path: string) => void;
 
 ### Prop descriptor types
 
-`OptionalProp<T>`, `DeferProp<T>`, `AlwaysProp<T>`, `MergeProp<T>`, `OnceProp<T>`, `ScrollProp<T>` and `ScrollOptions<T>` are documented in [Props API → Type definitions](/api/props#type-definitions).
+`OptionalProp<T>`, `DeferProp<T>`, `AlwaysProp<T>`, `MergeProp<T>`, `OnceProp<T>`, `ScrollProp<T>`, `LiveProp<T>` and `ScrollOptions<T>` are documented in [Props API → Type definitions](/api/props#type-definitions).
 
 ### `PageProps`
 
@@ -240,6 +286,7 @@ const INERTIA_HEADERS = {
   exceptOnceProps: "x-inertia-except-once-props",
   mergeIntent: "x-inertia-infinite-scroll-merge-intent",
   redirect: "x-inertia-redirect",
+  socketId: "x-socket-id",
 };
 
 const PREFETCH_HEADERS = ["purpose", "sec-purpose", "x-moz"]; // any one equal to "prefetch" marks a prefetch

@@ -79,9 +79,14 @@ Direct siblings (closures or descriptors under the same object) start together a
 await res.inertia("Page", { a: { x: () => slowX() }, b: { y: () => slowY() } });
 ```
 
-### Not yet ported
+### Live props need explicit channels
 
-Live props (`broadcastProps` and the `liveProps` page metadata) are planned, not yet ported.
+Events are plain strings and every live prop names its channels in the `channel` option; a bare string channel is public, so private, presence and encrypted channels must be given as `{ name, type }`. inertia-laravel can derive the event name and its channels from a broadcast event class (`broadcastAs()`, `broadcastOn()`); Node has no such classes, so there is no derivation and the ported Laravel tests for it are skipped. `broadcastProps` and `resolveBroadcastProps` take no request either: closures are called with no arguments, and the payload is never filtered by the receiving client's partial or once headers. See [Live props](/core/props#live-props).
+
+```ts
+live(() => loadOrder(id), { on: "OrderUpdated", channel: "orders.1" }); // public channel "orders.1"
+live(() => loadOrder(id), { on: "OrderUpdated", channel: { name: "orders.1", type: "private" } }); // private
+```
 
 ### Infinite scroll is not demoed
 

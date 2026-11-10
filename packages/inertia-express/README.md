@@ -18,6 +18,7 @@ The internal core is framework-agnostic, so future adapters for Fastify, Hono, N
 - `res.inertia(component, props, options)` Express helper
 - Shared props (static or per-request)
 - Optional, deferred (with rescue), always, merge, deep-merge, once, and infinite-scroll props
+- Live props (`liveProps` channel listeners) and `broadcastProps` payloads for your realtime server
 - Partial reloads (`X-Inertia-Partial-Data` / `X-Inertia-Partial-Except`)
 - Asset version handling and automatic 409 + `X-Inertia-Location` on mismatch
 - Inertia-aware redirects (auto 303 after PUT/PATCH/DELETE/QUERY, 409 + `X-Inertia-Redirect` for `#fragment` targets, empty 200 → redirect back)
@@ -135,7 +136,7 @@ built by one of the constructors below. Descriptors are chainable and mirror
 inertia-laravel's prop classes; the resolver is a port of its `PropsResolver`.
 
 ```ts
-import { always, deepMerge, defer, merge, once, optional, scroll } from "@blacklizard/inertia-express";
+import { always, deepMerge, defer, live, merge, once, optional, scroll } from "@blacklizard/inertia-express";
 ```
 
 A bare closure replaces 2.x's `lazy()`:
@@ -260,6 +261,38 @@ app.get("/posts", async (req, res) => {
 ```
 
 Laravel: `Inertia::scroll()`
+
+### `live`
+
+A prop the client refreshes when a realtime event arrives. `live(value, { on,
+channel, throttle? })` resolves like a plain prop and lists its channel
+listeners in the page object's `liveProps`; `always`, `optional`, `defer` and
+`once` descriptors accept the same options through `.live(options)`. Merge and
+scroll props cannot be live. Events are strings and channels are explicit: a
+bare string channel is public, and `{ name, type }` sets `private`,
+`presence` or `encrypted-private`. `throttle` is in milliseconds.
+
+`broadcastProps(props, onRescue?)` resolves every prop (no partial or once
+filtering, rescued props omitted) into the `{ __inertia: { props } }` payload
+to send with the event; `resolveBroadcastProps` returns the bare props map. The
+adapter does not open sockets: send the payload with your own realtime server.
+`req.inertia.socketId` carries the `X-Socket-Id` header (`null` when absent) so
+that server can skip the sender.
+
+```ts
+import { broadcastProps, live } from "@blacklizard/inertia-express";
+
+app.get("/leads", async (req, res) => {
+  await res.inertia("Leads/Index", {
+    leads: live(() => loadLeads(), { on: "LeadUpdated", channel: { name: "leads", type: "private" } }),
+  });
+});
+
+// After a lead changes (Socket.IO shown)
+io.to("leads").emit("inertia:props", await broadcastProps({ leads: () => loadLeads() }));
+```
+
+Laravel: `Inertia::live()` / `->live()`
 
 ### Rescue hook and fragment preservation
 
