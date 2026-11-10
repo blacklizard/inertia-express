@@ -4,7 +4,7 @@ import { isPropDescriptor } from './props.js';
 
 import type PropDescriptor from './prop-descriptor.js';
 import type {
-  InertiaRequestInfo, OnceMetadata, PageProps, PropsMetadata, RescueHandler, ScrollMetadata,
+  InertiaRequestInfo, LiveMetadata, OnceMetadata, PageProps, PropsMetadata, RescueHandler, ScrollMetadata,
 } from './types.js';
 
 /**
@@ -248,6 +248,8 @@ export default class PropsResolver {
 
   private readonly onceProps = Object.create(null) as Record<string, OnceMetadata>;
 
+  private readonly liveProps = Object.create(null) as Record<string, LiveMetadata>;
+
   private used = false;
 
   /**
@@ -317,6 +319,7 @@ export default class PropsResolver {
       ['rescuedProps', this.rescuedProps],
       ['scrollProps', this.scrollProps],
       ['onceProps', this.onceProps],
+      ['liveProps', this.liveProps],
     ];
 
     return Object.fromEntries(entries.filter(([, value]) => Object.keys(value).length > 0));
@@ -512,7 +515,7 @@ export default class PropsResolver {
    */
   private include(prop: unknown, value: unknown, path: string, parentWasResolved: boolean): unknown {
     this.assertScrollShape(prop, path, value);
-    this.collectMetadata(prop, path, value);
+    this.collectMetadata(prop, path, value, parentWasResolved);
 
     if (isPlainObjectOrArray(value)) {
       return this.walk(value, path, parentWasResolved || !isPlainObjectOrArray(prop));
@@ -592,6 +595,10 @@ export default class PropsResolver {
    * @param path Dot path of the prop.
    */
   private collectExclusionMetadata(prop: PropDescriptor, path: string): void {
+    if (prop.isLive) {
+      this.collectLiveMetadata(path, prop, false);
+    }
+
     if (prop.ignoreFirstLoad) {
       this.collectIgnoredPropMetadata(prop, path);
     } else if (prop.defers) {
@@ -751,8 +758,9 @@ export default class PropsResolver {
    * @param prop The prop being included.
    * @param path Dot path of the prop.
    * @param resolved The prop's resolved value.
+   * @param parentWasResolved Whether an ancestor was produced by resolving a closure or descriptor.
    */
-  private collectMetadata(prop: unknown, path: string, resolved: unknown): void {
+  private collectMetadata(prop: unknown, path: string, resolved: unknown, parentWasResolved: boolean): void {
     if (!isPropDescriptor(prop)) {
       return;
     }
@@ -768,6 +776,33 @@ export default class PropsResolver {
     if (prop.resolvesOnce) {
       this.collectOnceMetadata(path, prop);
     }
+
+    if (prop.isLive) {
+      this.collectLiveMetadata(path, prop, parentWasResolved);
+    }
+  }
+
+  /**
+   * Collect the listener manifest of a live prop, unless a partial request
+   * filters it out. Listener errors are not rescued.
+   *
+   * @param path Dot path of the prop.
+   * @param prop The live descriptor.
+   * @param parentWasResolved Whether an ancestor was produced by resolving a closure or descriptor.
+   */
+  private collectLiveMetadata(path: string, prop: PropDescriptor, parentWasResolved: boolean): void {
+    if (
+      this.isPartial
+      && !this.bypassesPartialFiltering(prop, parentWasResolved)
+      && !this.isIncludedInPartialMetadata(path)
+    ) {
+      return;
+    }
+
+    this.liveProps[path] = {
+      listeners: prop.liveListeners(),
+      ...(prop.liveThrottle !== null ? { throttle: prop.liveThrottle } : {}),
+    };
   }
 
   /**
