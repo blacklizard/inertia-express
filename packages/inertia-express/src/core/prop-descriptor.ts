@@ -3,6 +3,18 @@ import type {
 } from './types.js';
 
 /**
+ * Wrap a value in a list the way Laravel's `Arr::wrap` does: `undefined` and
+ * `null` (a plain-JS caller omitting an option) become an empty list.
+ */
+function wrapList<Item>(value: Item | readonly Item[] | null | undefined): Item[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+
+  return Array.isArray(value) ? [...value] : [value as Item];
+}
+
+/**
  * The constructor a {@link PropDescriptor} was created by.
  */
 export type PropKind = 'optional' | 'defer' | 'always' | 'merge' | 'once' | 'scroll' | 'live';
@@ -349,8 +361,8 @@ export default class PropDescriptor<T = unknown> {
       throw new Error(MERGE_LIVE_MESSAGE);
     }
 
-    const events = Array.isArray(options.on) ? [...options.on] : [options.on];
-    const channels = (Array.isArray(options.channel) ? options.channel : [options.channel]).map(normalizeChannel);
+    const events = wrapList(options.on);
+    const channels = wrapList(options.channel).map(normalizeChannel);
 
     this.liveDeclarations.push({ events, channels });
 
@@ -368,7 +380,7 @@ export default class PropDescriptor<T = unknown> {
    */
   liveListeners(): LiveListener[] {
     if (!this.liveDeclarations.some((declaration) => declaration.events.length > 0)) {
-      throw new Error('A live property must listen for at least one event.');
+      throw new Error('A live property must listen for at least one event. Pass the event to the [on] option.');
     }
 
     const listeners = new Map<string, LiveListener>();
@@ -381,7 +393,7 @@ export default class PropDescriptor<T = unknown> {
 
         channels.forEach((channel) => {
           const key = `${channel.type}:${channel.name}`;
-          const listener = listeners.get(key) ?? { channel, events: [] };
+          const listener = listeners.get(key) ?? { channel: { ...channel }, events: [] };
 
           if (!listener.events.includes(event)) {
             listener.events.push(event);

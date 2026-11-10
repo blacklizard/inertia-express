@@ -138,7 +138,16 @@ describe("LiveProp", () => {
   });
   it("a live prop without events throws", () => {
     const prop = d(live("bar", { on: [], channel: "orders" }));
-    expect(() => prop.liveListeners()).toThrow("A live property must listen for at least one event.");
+    expect(() => prop.liveListeners()).toThrow("A live property must listen for at least one event. Pass the event to the [on] option.");
+  });
+  it("listeners do not expose the descriptor's channel objects", () => {
+    const prop = d(live("bar", { on: "A", channel: ORDERS_1 }));
+    prop.liveListeners()[0]!.channel.name = "x";
+    expect(prop.liveListeners()[0]?.channel.name).toBe("orders.1");
+  });
+  it("missing on or channel from untyped callers reach the reference errors", () => {
+    expect(() => d(live("bar", { channel: "x" } as never)).liveListeners()).toThrow("A live property must listen for at least one event.");
+    expect(() => d(live("bar", { on: "A" } as never)).liveListeners()).toThrow("Unable to resolve the channels for the [A] event. Pass the [channel] option.");
   });
   it("the throttle is null by default", () => {
     expect(d(live("bar", { on: "OrderUpdated", channel: ORDERS_1 })).liveThrottle).toBeNull();
