@@ -276,15 +276,87 @@ export default class PropsResolver {
    * @param props Page props; these win over shared props on collision.
    */
   async resolve(shared: PageProps, props: PageProps): Promise<ResolvePropsResult> {
+    this.markUsed();
+    const combined = { ...this.resolveSharedProps(shared), ...props };
+    const resolved = await this.walk(await unpackDotProps(combined), '', false);
+
+    return { props: resolved as PageProps, metadata: this.buildMetadata() };
+  }
+
+  /**
+   * Resolve props for a socket broadcast payload: every prop is resolved, with
+   * no partial filtering, once/defer exclusion, metadata or dotted-key
+   * unpacking. Siblings resolve concurrently and keep insertion order; rescued
+   * props are reported and omitted; plain objects and arrays are recursed into.
+   *
+   * @param props Props to resolve.
+   */
+  async resolveBroadcast(props: PageProps): Promise<PageProps> {
+    this.markUsed();
+
+    return await this.broadcastNode(props, '') as PageProps;
+  }
+
+  /**
+   * Fail when this resolver has already been used; otherwise mark it used.
+   */
+  private markUsed(): void {
     if (this.used) {
       throw new Error('PropsResolver.resolve() was already called on this instance; create one resolver per response.');
     }
 
     this.used = true;
-    const combined = { ...this.resolveSharedProps(shared), ...props };
-    const resolved = await this.walk(await unpackDotProps(combined), '', false);
+  }
 
-    return { props: resolved as PageProps, metadata: this.buildMetadata() };
+  /**
+   * Resolve one level of a broadcast payload.
+   *
+   * @param node Plain object or array whose entries are resolved.
+   * @param prefix Dot path of the node, empty at the root.
+   */
+  private async broadcastNode(node: Node, prefix: string): Promise<Node> {
+    const keys = Object.keys(node);
+    const values = await Promise.all(keys.map(async (key) => (
+      this.broadcastEntry((node as Record<string, unknown>)[key], prefix === '' ? key : `${prefix}.${key}`)
+    )));
+
+    if (Array.isArray(node)) {
+      return values.filter((value) => value !== EXCLUDED);
+    }
+
+    const result = Object.create(null) as Record<string, unknown>;
+
+    keys.forEach((key, index) => {
+      if (values[index] !== EXCLUDED) {
+        result[key] = values[index];
+      }
+    });
+
+    return result;
+  }
+
+  /**
+   * Resolve a single broadcast entry, unwrapping one level of returned descriptor.
+   *
+   * @param prop The entry's raw value.
+   * @param path Dot path of the entry.
+   */
+  private async broadcastEntry(prop: unknown, path: string): Promise<unknown> {
+    let value = await this.resolveValue(prop);
+
+    if (isRescued(value)) {
+      return this.rescue(value.error, path);
+    }
+
+    if (value !== prop && this.isPropType(value)) {
+      value = await this.resolveValue(value);
+
+      if (isRescued(value)) {
+        return this.rescue(value.error, path);
+      }
+    }
+
+    return isPlainObjectOrArray(value) ? this.broadcastNode(value, path) : value;
   }
 
   /**
