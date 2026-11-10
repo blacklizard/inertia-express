@@ -1,5 +1,11 @@
 # @blacklizard/inertia-cache-redis
 
+## 5.0.1
+
+### Patch Changes
+
+- 24ba492: Widen the `@blacklizard/inertia-express` peer dependency from an exact version to a caret range (`^3.x`), so installing a newer 3.x adapter no longer conflicts with this package's peer requirement.
+
 ## 5.0.0
 
 ### Patch Changes

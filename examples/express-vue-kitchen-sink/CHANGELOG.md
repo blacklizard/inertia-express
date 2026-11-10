@@ -1,5 +1,13 @@
 # example-express-vue-kitchen-sink
 
+## 1.0.6
+
+### Patch Changes
+
+- Updated dependencies [6eb944e]
+- Updated dependencies [2664a8d]
+  - @blacklizard/inertia-express@3.1.0
+
 ## 1.0.5
 
 ### Patch Changes
