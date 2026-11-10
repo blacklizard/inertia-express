@@ -6,6 +6,8 @@ export default defineConfig({
     "A production-ready, TypeScript-first Inertia.js v3 server adapter for Express.js",
   // GitHub Pages project site: https://blacklizard.github.io/inertia-express/
   base: "/inertia-express/",
+  // Local planning notes (git-ignored) must never reach the published site.
+  srcExclude: ["superpowers/**"],
   themeConfig: {
     nav: [
       { text: "Guide", link: "/guide/introduction" },
