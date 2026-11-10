@@ -320,16 +320,10 @@ export default class PropsResolver {
       this.broadcastEntry((node as Record<string, unknown>)[key], prefix === '' ? key : `${prefix}.${key}`)
     )));
 
-    if (Array.isArray(node)) {
-      return values.filter((value) => value !== EXCLUDED);
-    }
-
-    const result = Object.create(null) as Record<string, unknown>;
+    const result: Node = Array.isArray(node) ? [] : {};
 
     keys.forEach((key, index) => {
-      if (values[index] !== EXCLUDED) {
-        result[key] = values[index];
-      }
+      writeEntry(result, key, values[index]);
     });
 
     return result;

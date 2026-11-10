@@ -13,8 +13,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  always, broadcastProps, defer, live, once, optional, resolveBroadcastProps,
+  always, broadcastProps, defer, live, once, optional, PropsResolver, resolveBroadcastProps,
 } from "../../src/core/index.js";
+import { makeRequest } from "./support/request.js";
 
 describe("broadcastProps", () => {
   it("returns the inertia props envelope and nothing else", async () => {
@@ -94,5 +95,24 @@ describe("broadcastProps", () => {
     });
     expect(Object.keys(out)).toEqual(["slow", "fast"]);
     await expect(resolveBroadcastProps({ bad: () => { throw new Error("x"); } })).rejects.toThrow("x");
+  });
+
+  it("payload objects are plain objects", async () => {
+    const props = (await broadcastProps({ order: { id: 1 } })).__inertia.props;
+    expect(Object.getPrototypeOf(props)).toBe(Object.prototype);
+    expect(Object.getPrototypeOf(props.order)).toBe(Object.prototype);
+    expect((props.order as object).hasOwnProperty("id")).toBe(true);
+  });
+
+  it("a rescued array element is dropped and later items shift down", async () => {
+    expect(await resolveBroadcastProps({
+      list: [1, defer(() => { throw new Error("x"); }).rescue(), 3],
+    }, () => {})).toEqual({ list: [1, 3] });
+  });
+
+  it("a resolver instance cannot broadcast after resolving", async () => {
+    const r = new PropsResolver(makeRequest(), "");
+    await r.resolveBroadcast({});
+    await expect(r.resolveBroadcast({})).rejects.toThrow("already called");
   });
 });
