@@ -1,6 +1,6 @@
 import PropDescriptor from './prop-descriptor.js';
 
-import type { PropSource, ScrollOptions } from './prop-descriptor.js';
+import type { LiveOptions, PropSource, ScrollOptions } from './prop-descriptor.js';
 
 /**
  * Argument accepted by `append()` / `prepend()`: a root flag, a path, a list
@@ -16,6 +16,7 @@ export interface OptionalProp<T> {
   as: (key: string) => OptionalProp<T>;
   until: (delay: number | Date) => OptionalProp<T>;
   fresh: (value?: boolean) => OptionalProp<T>;
+  live: (options: LiveOptions) => OptionalProp<T>;
 }
 
 /**
@@ -32,6 +33,7 @@ export interface DeferProp<T> {
   until: (delay: number | Date) => DeferProp<T>;
   fresh: (value?: boolean) => DeferProp<T>;
   rescue: (value?: boolean) => DeferProp<T>;
+  live: (options: LiveOptions) => DeferProp<T>;
 }
 
 /**
@@ -49,10 +51,19 @@ export interface MergeProp<T> {
 }
 
 /**
- * Prop included on every response, regardless of partial filtering. It has
- * no chain methods.
+ * Prop included on every response, regardless of partial filtering. Its only
+ * chain method declares live updates.
  */
-export type AlwaysProp<T> = Pick<PropDescriptor<T>, never>;
+export interface AlwaysProp<T> {
+  live: (options: LiveOptions) => AlwaysProp<T>;
+}
+
+/**
+ * Prop the client refreshes when a realtime event arrives.
+ */
+export interface LiveProp<T> {
+  live: (options: LiveOptions) => LiveProp<T>;
+}
 
 /**
  * Prop the client resolves once and caches across visits.
@@ -61,6 +72,7 @@ export interface OnceProp<T> {
   as: (key: string) => OnceProp<T>;
   until: (delay: number | Date) => OnceProp<T>;
   fresh: (value?: boolean) => OnceProp<T>;
+  live: (options: LiveOptions) => OnceProp<T>;
 }
 
 /**
@@ -136,6 +148,17 @@ export function always<T>(value: PropSource<T>): AlwaysProp<T> {
   prop.isAlways = true;
 
   return prop;
+}
+
+/**
+ * A live prop: its value is resolved like an always prop's source and the
+ * client refreshes it when one of the given events arrives.
+ *
+ * @param value Plain value or producer.
+ * @param options Events, channels and optional throttle.
+ */
+export function live<T>(value: PropSource<T>, options: LiveOptions): LiveProp<T> {
+  return new PropDescriptor<T>('live', value).live(options);
 }
 
 /**

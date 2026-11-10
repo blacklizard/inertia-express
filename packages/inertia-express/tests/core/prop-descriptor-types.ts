@@ -3,7 +3,7 @@
  * line must fail to compile; the rest must compile. Checked by `pnpm typecheck`
  * through tsconfig.tests.json, never executed.
  */
-import { always, defer, merge, once, optional, scroll } from "../../src/core/props.js";
+import { always, defer, live, merge, once, optional, scroll } from "../../src/core/props.js";
 
 const meta = { pageName: "page", previousPage: null, nextPage: 2, currentPage: 1 };
 
@@ -106,5 +106,20 @@ scroll(() => ({ data: [] }), { metadata: meta }).defer().rescue();
 defer(() => 1).rescue().defer();
 // @ts-expect-error
 defer(() => 1).once().defer();
+
+// Live declarations.
+always("x").live({ on: "e", channel: "c" });
+optional(() => 1).live({ on: "e", channel: "c" });
+defer(() => 1).live({ on: ["e"], channel: [{ name: "c", type: "private" }], throttle: 100 });
+once(() => 1).live({ on: "e", channel: "c" });
+live("x", { on: "e", channel: "c" }).live({ on: "f", channel: "d" });
+// @ts-expect-error merge props cannot be live
+merge([1]).live({ on: "e", channel: "c" });
+// @ts-expect-error scroll props cannot be live
+scroll(() => ({ data: [] }), { metadata: meta }).live({ on: "e", channel: "c" });
+// @ts-expect-error on is required
+live("x", { channel: "c" });
+// @ts-expect-error channel is required
+live("x", { on: "e" });
 
 export {};

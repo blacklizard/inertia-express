@@ -1,9 +1,11 @@
-import type { ScrollMetadata } from './types.js';
+import type {
+  LiveChannel, LiveChannelType, LiveListener, ScrollMetadata,
+} from './types.js';
 
 /**
  * The constructor a {@link PropDescriptor} was created by.
  */
-export type PropKind = 'optional' | 'defer' | 'always' | 'merge' | 'once' | 'scroll';
+export type PropKind = 'optional' | 'defer' | 'always' | 'merge' | 'once' | 'scroll' | 'live';
 
 /**
  * A prop's raw source: a plain value or a (possibly async) producer.
@@ -18,6 +20,55 @@ export interface ScrollOptions<T> {
   wrapper?: string;
   /** Pagination metadata, or a function deriving it from the resolved value. */
   metadata: ScrollMetadata | ((resolved: T) => ScrollMetadata);
+}
+
+/**
+ * A live channel as given to `live()`: a bare name (public) or an explicit
+ * name and type.
+ */
+export type LiveChannelInput = string | LiveChannel;
+
+/**
+ * Options accepted by `live()` and `.live()`.
+ */
+export interface LiveOptions {
+  /** Event name or names that trigger a refresh of the prop. */
+  on: string | string[];
+  /** Channel or channels the events are broadcast on. */
+  channel: LiveChannelInput | LiveChannelInput[];
+  /** Minimum milliseconds between refreshes of the prop. */
+  throttle?: number;
+}
+
+const MERGE_LIVE_MESSAGE = 'Live updates are not supported on merge properties.';
+
+/** Name prefix the broadcaster adds for each channel type; never sent to the client. */
+const CHANNEL_PREFIXES: Record<LiveChannelType, string> = {
+  public: '',
+  private: 'private-',
+  presence: 'presence-',
+  'encrypted-private': 'private-encrypted-',
+};
+
+/**
+ * Normalise one channel input into a {@link LiveChannel}: a bare string is
+ * public; an object's type is validated and its type prefix stripped from the name.
+ *
+ * @param input Bare channel name or explicit channel.
+ */
+function normalizeChannel(input: LiveChannelInput): LiveChannel {
+  if (typeof input === 'string') {
+    return { name: input, type: 'public' };
+  }
+
+  if (!Object.hasOwn(CHANNEL_PREFIXES, input.type)) {
+    throw new TypeError(`Unknown live channel type [${String(input.type)}]. Use public, private, presence or encrypted-private.`);
+  }
+
+  const prefix = CHANNEL_PREFIXES[input.type];
+  const name = prefix !== '' && input.name.startsWith(prefix) ? input.name.slice(prefix.length) : input.name;
+
+  return { name, type: input.type };
 }
 
 /**
@@ -69,6 +120,10 @@ export default class PropDescriptor<T = unknown> {
 
   scrollMetadata: ScrollMetadata | ((resolved: T) => ScrollMetadata) | null = null;
 
+  liveDeclarations: { events: string[]; channels: LiveChannel[] }[] = [];
+
+  liveThrottle: number | null = null;
+
   /**
    * Create a descriptor around a prop source.
    *
@@ -97,9 +152,20 @@ export default class PropDescriptor<T = unknown> {
   }
 
   /**
-   * Mark the prop for a shallow client-side merge.
+   * `true` once at least one live declaration was recorded.
+   */
+  get isLive(): boolean {
+    return this.liveDeclarations.length > 0;
+  }
+
+  /**
+   * Mark the prop for a shallow client-side merge. Throws when the prop is live.
    */
   merge(): this {
+    if (this.isLive) {
+      throw new Error(MERGE_LIVE_MESSAGE);
+    }
+
     this.merges = true;
 
     return this;
@@ -269,6 +335,64 @@ export default class PropDescriptor<T = unknown> {
     }
 
     return null;
+  }
+
+  /**
+   * Declare events (and the channels they arrive on) that refresh the prop.
+   * May be called more than once; a later throttle replaces an earlier one.
+   * Throws on a merge prop or an unknown channel type.
+   *
+   * @param options Events, channels and optional throttle in milliseconds.
+   */
+  live(options: LiveOptions): this {
+    if (this.merges) {
+      throw new Error(MERGE_LIVE_MESSAGE);
+    }
+
+    const events = Array.isArray(options.on) ? [...options.on] : [options.on];
+    const channels = (Array.isArray(options.channel) ? options.channel : [options.channel]).map(normalizeChannel);
+
+    this.liveDeclarations.push({ events, channels });
+
+    if (options.throttle !== undefined) {
+      this.liveThrottle = options.throttle;
+    }
+
+    return this;
+  }
+
+  /**
+   * Build the channel listeners, ported from inertia-laravel's
+   * `HasLiveUpdates::liveListeners()` without event-class branches. Each
+   * channel gets the deduplicated events declared for it, in first-seen order.
+   */
+  liveListeners(): LiveListener[] {
+    if (!this.liveDeclarations.some((declaration) => declaration.events.length > 0)) {
+      throw new Error('A live property must listen for at least one event.');
+    }
+
+    const listeners = new Map<string, LiveListener>();
+
+    this.liveDeclarations.forEach(({ events, channels }) => {
+      events.forEach((event) => {
+        if (channels.length === 0) {
+          throw new Error(`Unable to resolve the channels for the [${event}] event. Pass the [channel] option.`);
+        }
+
+        channels.forEach((channel) => {
+          const key = `${channel.type}:${channel.name}`;
+          const listener = listeners.get(key) ?? { channel, events: [] };
+
+          if (!listener.events.includes(event)) {
+            listener.events.push(event);
+          }
+
+          listeners.set(key, listener);
+        });
+      });
+    });
+
+    return [...listeners.values()];
   }
 
   /**
